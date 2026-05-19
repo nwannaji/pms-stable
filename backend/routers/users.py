@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import os
 import shutil
@@ -119,7 +119,7 @@ async def delete_user(
         "user_id": str(user_id)
     }
 
-@router.get("/", response_model=UserList)
+@router.get("", response_model=UserList)
 async def get_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
@@ -192,7 +192,7 @@ async def get_users(
         per_page=per_page
     )
 
-@router.post("/", response_model=UserSchema)
+@router.post("", response_model=UserSchema)
 async def create_user(
     user_data: UserCreate,
     current_user: UserSession = Depends(get_current_user),
@@ -221,7 +221,7 @@ async def create_user(
 
     # Generate onboarding token with 7-day expiration
     onboarding_token = generate_onboarding_token()
-    token_expiration = datetime.now() + timedelta(days=7)
+    token_expiration = datetime.now(timezone.utc) + timedelta(days=7)
 
     # Compute full name from separate fields
     name_parts = [user_data.first_name]
@@ -276,9 +276,12 @@ async def create_user(
     db.refresh(user)
 
     # Send onboarding email
-    from utils.notifications import NotificationService
-    notification_service = NotificationService(db)
-    notification_service.notify_user_created(user, onboarding_token)
+    try:
+        from utils.notifications import NotificationService
+        notification_service = NotificationService(db)
+        notification_service.notify_user_created(user, onboarding_token)
+    except Exception as e:
+        print(f"✗ Failed to send onboarding email: {e}")
 
     return UserSchema(**enhance_user_with_supervisor(user, db))
 
@@ -891,7 +894,7 @@ async def resend_onboarding_email(
 
     # Generate new onboarding token with 7-day expiration
     onboarding_token = generate_onboarding_token()
-    token_expiration = datetime.now() + timedelta(days=7)
+    token_expiration = datetime.now(timezone.utc) + timedelta(days=7)
 
     user.onboarding_token = onboarding_token
     user.onboarding_token_expires_at = token_expiration
@@ -913,13 +916,17 @@ async def resend_onboarding_email(
     )
     db.add(history)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save onboarding token: {str(e)}")
     db.refresh(user)
 
     # Resend onboarding email
-    from utils.notifications import NotificationService
-    notification_service = NotificationService(db)
     try:
+        from utils.notifications import NotificationService
+        notification_service = NotificationService(db)
         notification_service.notify_user_created(user, onboarding_token)
     except Exception as e:
         print(f"✗ Failed to send onboarding email: {e}")
@@ -963,7 +970,7 @@ async def send_password_reset_link(
 
     # Generate new reset token with 7-day expiration
     reset_token = generate_onboarding_token()
-    token_expiration = datetime.now() + timedelta(days=7)
+    token_expiration = datetime.now(timezone.utc) + timedelta(days=7)
 
     user.onboarding_token = reset_token
     user.onboarding_token_expires_at = token_expiration
@@ -985,13 +992,17 @@ async def send_password_reset_link(
     )
     db.add(history)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save reset token: {str(e)}")
     db.refresh(user)
 
     # Send password reset email
-    from utils.notifications import NotificationService
-    notification_service = NotificationService(db)
     try:
+        from utils.notifications import NotificationService
+        notification_service = NotificationService(db)
         notification_service.notify_password_reset(user, reset_token)
     except Exception as e:
         print(f"✗ Failed to send password reset email: {e}")

@@ -3,7 +3,7 @@ import Cookies from 'js-cookie'
 /**
  * API configuration and base settings
  */
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
 const TOKEN_COOKIE_NAME = 'auth_token'
 const REFRESH_TOKEN_COOKIE_NAME = 'refresh_token'
 const TOKEN_EXPIRY_DAYS = 1  // Access token cookie expiry (1 day)
@@ -22,59 +22,92 @@ class ApiError extends Error {
 }
 
 /**
- * Get authentication token from cookies
- * @returns {string|null} JWT token or null if not found
+ * Detect if the current page is served over HTTPS.
+ * Accounts for reverse proxies that terminate SSL (checks X-Forwarded-Proto).
  */
-function getAuthToken() {
-  return Cookies.get(TOKEN_COOKIE_NAME) || null
+const isSecureContext = typeof window !== 'undefined' &&
+  (window.location.protocol === 'https:' ||
+   window.location.hostname === 'localhost' ||
+   window.location.hostname === '127.0.0.1')
+
+const COOKIE_OPTIONS = {
+  secure: isSecureContext,
+  sameSite: 'lax'
 }
 
 /**
- * Set authentication token in cookies
+ * Fallback storage key when cookies fail (e.g. large JWT exceeding 4KB limit)
+ */
+const AUTH_TOKEN_LS_KEY = 'auth_token_fallback'
+const REFRESH_TOKEN_LS_KEY = 'refresh_token_fallback'
+
+/**
+ * Get authentication token — checks cookie first, then localStorage fallback
+ * @returns {string|null} JWT token or null if not found
+ */
+function getAuthToken() {
+  return Cookies.get(TOKEN_COOKIE_NAME) || localStorage.getItem(AUTH_TOKEN_LS_KEY) || null
+}
+
+/**
+ * Set authentication token in cookies with localStorage fallback
  * @param {string} token - JWT token to store
  */
 function setAuthToken(token) {
   Cookies.set(TOKEN_COOKIE_NAME, token, {
     expires: TOKEN_EXPIRY_DAYS,
-    // Disable secure flag for HTTP deployments (change to true when using HTTPS)
-    secure: false,
-    // Use 'lax' instead of 'strict' for IP-based deployments
-    sameSite: 'lax'
+    ...COOKIE_OPTIONS
   })
+
+  // Verify cookie was actually set — browsers silently reject cookies that
+  // exceed ~4KB or that fail the secure flag (e.g. behind SSL-terminating proxies)
+  if (!Cookies.get(TOKEN_COOKIE_NAME)) {
+    localStorage.setItem(AUTH_TOKEN_LS_KEY, token)
+  } else {
+    // Cookie worked — clear any stale localStorage fallback
+    localStorage.removeItem(AUTH_TOKEN_LS_KEY)
+  }
 }
 
 /**
- * Remove authentication token from cookies
+ * Remove authentication token from cookies and localStorage fallback
  */
 function removeAuthToken() {
-  Cookies.remove(TOKEN_COOKIE_NAME)
+  Cookies.remove(TOKEN_COOKIE_NAME, COOKIE_OPTIONS)
+  localStorage.removeItem(AUTH_TOKEN_LS_KEY)
 }
 
 /**
- * Get refresh token from cookies
+ * Get refresh token — checks cookie first, then localStorage fallback
  * @returns {string|null} Refresh token or null if not found
  */
 function getRefreshToken() {
-  return Cookies.get(REFRESH_TOKEN_COOKIE_NAME) || null
+  return Cookies.get(REFRESH_TOKEN_COOKIE_NAME) || localStorage.getItem(REFRESH_TOKEN_LS_KEY) || null
 }
 
 /**
- * Set refresh token in cookies
+ * Set refresh token in cookies with localStorage fallback
  * @param {string} token - Refresh token to store
  */
 function setRefreshToken(token) {
   Cookies.set(REFRESH_TOKEN_COOKIE_NAME, token, {
     expires: REFRESH_TOKEN_EXPIRY_DAYS,
-    secure: false,  // Change to true for HTTPS
-    sameSite: 'lax'
+    ...COOKIE_OPTIONS
   })
+
+  if (!Cookies.get(REFRESH_TOKEN_COOKIE_NAME)) {
+    localStorage.setItem(REFRESH_TOKEN_LS_KEY, token)
+  } else {
+    localStorage.removeItem(REFRESH_TOKEN_LS_KEY)
+  }
 }
 
 /**
- * Remove refresh token from cookies
+ * Remove refresh token from cookies and localStorage fallback
  */
 function removeRefreshToken() {
-  Cookies.remove(REFRESH_TOKEN_COOKIE_NAME)
+  Cookies.remove(REFRESH_TOKEN_COOKIE_NAME, COOKIE_OPTIONS)
+  localStorage.removeItem(REFRESH_TOKEN_LS_KEY)
 }
 
 /**
@@ -331,18 +364,11 @@ export const auth = {
     }
     const response = await POST('/api/auth/login', loginData)
     if (response.access_token) {
-      console.log('Setting auth token after login')
       setAuthToken(response.access_token)
 
-      // Store refresh token if provided
       if (response.refresh_token) {
         setRefreshToken(response.refresh_token)
-        console.log('Refresh token stored successfully')
       }
-
-      // Verify token was set
-      const storedToken = getAuthToken()
-      console.log('Token stored successfully:', !!storedToken)
 
       // Store complete session data in localStorage with role version
       const sessionData = {
@@ -456,7 +482,7 @@ export const auth = {
    * @returns {Promise<Object>} Password reset response
    */
   async forgotPassword(email) {
-    return POST('/api/auth/forgot-password', { email })
+    return POST('/api/auth/reset-password', { email })
   },
 
   /**
@@ -565,6 +591,24 @@ export const users = {
    */
   async getHistory(id) {
     return GET(`/api/users/${id}/history`)
+  },
+
+  /**
+   * Resend onboarding email to a user who hasn't activated yet
+   * @param {string} id - User ID
+   * @returns {Promise<Object>} Resend response with token expiration
+   */
+  async resendOnboarding(id) {
+    return POST(`/api/users/${id}/resend-onboarding`)
+  },
+
+  /**
+   * Send password reset link to an onboarded user
+   * @param {string} id - User ID
+   * @returns {Promise<Object>} Reset link response with token expiration
+   */
+  async sendPasswordReset(id) {
+    return POST(`/api/users/${id}/send-password-reset`)
   }
 }
 

@@ -203,12 +203,19 @@ async def reset_password(
     # Generate new onboarding token with 7-day expiration
     user.onboarding_token = generate_onboarding_token()
     user.onboarding_token_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    db.commit()
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
     # Send password reset email
-    from utils.notifications import NotificationService
-    notification_service = NotificationService(db)
-    notification_service.notify_password_reset(user, user.onboarding_token)
+    try:
+        from utils.notifications import NotificationService
+        notification_service = NotificationService(db)
+        notification_service.notify_password_reset(user, user.onboarding_token)
+    except Exception as e:
+        print(f"✗ Failed to send password reset email: {e}")
 
     return {"message": "If the email exists, a reset link has been sent"}
 
