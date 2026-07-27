@@ -4,11 +4,13 @@ Based on CLAUDE.md specification with onboarding flow
 Supports refresh token pattern for extended sessions
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime, timezone
 from pydantic import BaseModel
 from typing import Optional
+import logging
+import os
 
 from database import get_db
 from models import User, UserStatus
@@ -189,6 +191,7 @@ async def onboard_user(
 @router.post("/reset-password")
 async def reset_password(
     reset_data: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -209,15 +212,22 @@ async def reset_password(
     except Exception:
         db.rollback()
 
-    # Send password reset email
-    try:
-        from utils.notifications import NotificationService
-        notification_service = NotificationService(db)
-        notification_service.notify_password_reset(user, user.onboarding_token)
-    except Exception as e:
-        print(f"✗ Failed to send password reset email: {e}")
+    # Send password reset email in background to avoid proxy timeouts
+    reset_token = user.onboarding_token
+    background_tasks.add_task(_send_password_reset_email_bg, user.email, user.name, reset_token)
 
     return {"message": "If the email exists, a reset link has been sent"}
+
+def _send_password_reset_email_bg(user_email: str, user_name: str, reset_token: str):
+    """Send password reset email in background to avoid proxy timeouts"""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from utils.email_service import EmailService
+        EmailService.send_password_reset_email(user_email, user_name, reset_token)
+        logger.info(f"✓ Password reset email sent to {user_email}")
+    except Exception as e:
+        logger.error(f"✗ Failed to send password reset email to {user_email}: {e}", exc_info=True)
 
 @router.post("/change-password")
 async def change_password(
@@ -326,3 +336,117 @@ async def refresh_access_token(
         "permissions": user_perms["permissions"],
         "scope": user_perms["effective_scope"]
     }
+
+
+@router.get("/smtp-check")
+async def smtp_check(current_user: UserSession = Depends(get_current_user)):
+    """
+    Diagnostic endpoint to check SMTP configuration and connectivity.
+    Requires authentication. Returns SMTP config summary and connection test result.
+    """
+    import smtplib
+    import ssl
+    import socket
+    import os as _os
+    from utils.email_service import SMTP_HOST, SMTP_PORT, SMTP_USERNAME, FROM_EMAIL
+
+    result = {
+        "smtp_host": SMTP_HOST,
+        "smtp_port": SMTP_PORT,
+        "smtp_username": SMTP_USERNAME,
+        "from_email": FROM_EMAIL,
+        "password_set": bool(_os.getenv("SMTP_PASSWORD")),
+        "frontend_url": _os.getenv("FRONTEND_URL", "http://localhost:3000"),
+        "tests": []
+    }
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    _SMTP_PASSWORD = _os.getenv("SMTP_PASSWORD", "")
+
+    # Test 1: DNS resolution
+    try:
+        ip = socket.gethostbyname(SMTP_HOST)
+        result["tests"].append({"test": "dns_resolution", "status": "ok", "ip": ip})
+    except socket.gaierror as e:
+        result["tests"].append({"test": "dns_resolution", "status": "fail", "error": str(e)})
+        result["overall"] = "fail — cannot resolve SMTP host"
+        return result
+
+    # Test 2: TCP connectivity
+    try:
+        sock = socket.create_connection((SMTP_HOST, SMTP_PORT), timeout=10)
+        sock.close()
+        result["tests"].append({"test": "tcp_connectivity", "status": "ok", "port": SMTP_PORT})
+    except (socket.timeout, ConnectionRefusedError, OSError) as e:
+        result["tests"].append({"test": "tcp_connectivity", "status": "fail", "error": str(e)})
+        result["overall"] = "fail — cannot connect to SMTP server"
+        return result
+
+    # Test 3: STARTTLS on configured port
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.ehlo()
+            server.starttls(context=ctx)
+            server.ehlo()
+            if SMTP_USERNAME:
+                server.login(SMTP_USERNAME, _SMTP_PASSWORD)
+            result["tests"].append({"test": "starttls_login", "status": "ok", "port": SMTP_PORT})
+            result["overall"] = "ok"
+            return result
+    except Exception as e:
+        result["tests"].append({"test": "starttls_login", "status": "fail", "port": SMTP_PORT, "error": str(e)})
+
+    # Test 4: SMTP_SSL on configured port
+    try:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=ctx, timeout=15) as server:
+            if SMTP_USERNAME:
+                server.login(SMTP_USERNAME, _SMTP_PASSWORD)
+            result["tests"].append({"test": "smtp_ssl_login", "status": "ok", "port": SMTP_PORT})
+            result["overall"] = "ok"
+            return result
+    except Exception as e:
+        result["tests"].append({"test": "smtp_ssl_login", "status": "fail", "port": SMTP_PORT, "error": str(e)})
+
+    # Test 5: Plain SMTP on configured port
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.ehlo()
+            if SMTP_USERNAME:
+                server.login(SMTP_USERNAME, _SMTP_PASSWORD)
+            result["tests"].append({"test": "plain_smtp_login", "status": "ok", "port": SMTP_PORT})
+            result["overall"] = "ok"
+            return result
+    except Exception as e:
+        result["tests"].append({"test": "plain_smtp_login", "status": "fail", "port": SMTP_PORT, "error": str(e)})
+
+    # Test 6: STARTTLS on port 587 (standard)
+    if SMTP_PORT != 587:
+        try:
+            with smtplib.SMTP(SMTP_HOST, 587, timeout=15) as server:
+                server.ehlo()
+                server.starttls(context=ctx)
+                server.ehlo()
+                if SMTP_USERNAME:
+                    server.login(SMTP_USERNAME, _SMTP_PASSWORD)
+                result["tests"].append({"test": "starttls_587", "status": "ok"})
+                result["overall"] = "ok"
+                return result
+        except Exception as e:
+            result["tests"].append({"test": "starttls_587", "status": "fail", "error": str(e)})
+
+    # Test 7: Plain on port 25
+    if SMTP_PORT != 25:
+        try:
+            with smtplib.SMTP(SMTP_HOST, 25, timeout=15) as server:
+                server.ehlo()
+                result["tests"].append({"test": "plain_25", "status": "ok"})
+                result["overall"] = "ok"
+                return result
+        except Exception as e:
+            result["tests"].append({"test": "plain_25", "status": "fail", "error": str(e)})
+
+    result["overall"] = "fail — all SMTP connection methods failed"
+    return result

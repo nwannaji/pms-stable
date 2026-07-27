@@ -7,7 +7,7 @@ from datetime import datetime
 
 from database import get_db
 from models import User
-from websocket_manager import manager, MessageTypes
+from utils.websocket_manager import manager, MessageTypes
 from utils.auth import verify_token
 from redis_client import cache
 

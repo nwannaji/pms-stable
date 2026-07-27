@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nigcomsat PMS — Staff Training Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  :root {
+    --primary: #1e40af;
+    --primary-light: #3b82f6;
+    --primary-dark: #1e3a8a;
+    --accent: #0ea5e9;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    --slide-width: 1280px;
+    --slide-height: 720px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0f172a;
+    color: var(--gray-800);
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .presentation {
+    width: var(--slide-width);
+    height: var(--slide-height);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .slide {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0; left: 0;
+    opacity: 0;
+    transform: translateX(60px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    display: none;
+    background: white;
+    overflow: hidden;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    display: flex;
+  }
+
+  /* ── Title Slide ── */
+  .slide-title {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--accent) 100%);
+    color: white;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px;
+  }
+  .slide-title .logo { width: 80px; height: 80px; background: white; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 800; color: var(--primary); margin-bottom: 30px; }
+  .slide-title h1 { font-size: 52px; font-weight: 800; line-height: 1.1; margin-bottom: 16px; }
+  .slide-title h2 { font-size: 24px; font-weight: 400; opacity: 0.9; margin-bottom: 40px; }
+  .slide-title .subtitle { font-size: 18px; opacity: 0.7; }
+
+  /* ── Section Header ── */
+  .slide-section {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+    color: white;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px;
+  }
+  .slide-section .section-number { font-size: 72px; font-weight: 800; opacity: 0.3; position: absolute; top: 20px; right: 40px; }
+  .slide-section h1 { font-size: 48px; font-weight: 700; margin-bottom: 16px; }
+  .slide-section p { font-size: 22px; opacity: 0.9; max-width: 800px; }
+
+  /* ── Content Slide ── */
+  .slide-content {
+    flex-direction: row;
+    padding: 0;
+  }
+  .slide-content .sidebar {
+    width: 320px;
+    background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary) 100%);
+    color: white;
+    padding: 50px 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .slide-content .sidebar h2 { font-size: 28px; font-weight: 700; margin-bottom: 16px; line-height: 1.2; }
+  .slide-content .sidebar .slide-num { font-size: 14px; opacity: 0.5; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
+  .slide-content .sidebar p { font-size: 16px; opacity: 0.85; line-height: 1.5; }
+  .slide-content .main {
+    flex: 1;
+    padding: 44px 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow-y: auto;
+  }
+
+  /* ── Two-Column Slide ── */
+  .slide-two-col {
+    flex-direction: column;
+    padding: 50px;
+  }
+  .slide-two-col h2 {
+    font-size: 30px; font-weight: 700; color: var(--primary); margin-bottom: 8px;
+  }
+  .slide-two-col .sub { font-size: 16px; color: var(--gray-500); margin-bottom: 32px; }
+  .slide-two-col .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+  .slide-two-col .col h3 {
+    font-size: 18px; font-weight: 600; color: var(--primary-dark); margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--accent);
+  }
+
+  /* ── Steps Slide ── */
+  .slide-steps {
+    flex-direction: column;
+    padding: 50px;
+  }
+  .slide-steps h2 {
+    font-size: 30px; font-weight: 700; color: var(--primary); margin-bottom: 8px;
+  }
+  .slide-steps .sub { font-size: 16px; color: var(--gray-500); margin-bottom: 28px; }
+  .steps-list { display: flex; flex-direction: column; gap: 12px; }
+  .step-item {
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 14px 18px; background: var(--gray-50); border-radius: 10px;
+    border-left: 4px solid var(--primary);
+  }
+  .step-num {
+    width: 32px; height: 32px; background: var(--primary); color: white;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; flex-shrink: 0;
+  }
+  .step-text { flex: 1; }
+  .step-text strong { color: var(--primary-dark); }
+  .step-text p { font-size: 15px; line-height: 1.5; color: var(--gray-700); }
+
+  /* ── Table Slide ── */
+  .slide-table {
+    flex-direction: column;
+    padding: 50px;
+  }
+  .slide-table h2 { font-size: 30px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+  .slide-table .sub { font-size: 16px; color: var(--gray-500); margin-bottom: 20px; }
+  .slide-table table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .slide-table thead th { background: var(--primary); color: white; padding: 10px 14px; text-align: left; font-weight: 600; }
+  .slide-table tbody td { padding: 9px 14px; border-bottom: 1px solid var(--gray-200); color: var(--gray-700); }
+  .slide-table tbody tr:nth-child(even) { background: var(--gray-50); }
+  .slide-table tbody tr:hover { background: #eff6ff; }
+
+  /* ── Tip Box ── */
+  .tip-box {
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 12px 16px; margin-top: 16px; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .tip-box .tip-icon { font-size: 18px; flex-shrink: 0; }
+  .tip-box p { font-size: 14px; color: var(--primary-dark); line-height: 1.5; }
+
+  .warning-box {
+    background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;
+    padding: 12px 16px; margin-top: 16px; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .warning-box .warn-icon { font-size: 18px; flex-shrink: 0; }
+  .warning-box p { font-size: 14px; color: #92400e; line-height: 1.5; }
+
+  /* ── Bullets ── */
+  ul.bullets { list-style: none; padding: 0; }
+  ul.bullets li { padding: 6px 0; padding-left: 24px; position: relative; font-size: 15px; line-height: 1.5; color: var(--gray-700); }
+  ul.bullets li::before { content: "●"; color: var(--accent); position: absolute; left: 4px; font-size: 10px; top: 10px; }
+  ul.bullets li strong { color: var(--primary-dark); }
+
+  /* ── Badge ── */
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-green { background: #d1fae5; color: #065f46; }
+  .badge-yellow { background: #fef3c7; color: #92400e; }
+  .badge-red { background: #fee2e2; color: #991b1b; }
+  .badge-purple { background: #ede9fe; color: #5b21b6; }
+  .badge-gray { background: #f1f5f9; color: #475569; }
+
+  /* ── Navigation ── */
+  .nav-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px);
+    padding: 10px 30px; display: flex; align-items: center; justify-content: space-between;
+    z-index: 1000; color: white;
+  }
+  .nav-bar .slide-counter { font-size: 14px; opacity: 0.7; }
+  .nav-bar .progress-bar { flex: 1; max-width: 400px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin: 0 24px; }
+  .nav-bar .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; }
+  .nav-btn {
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+    color: white; padding: 8px 20px; border-radius: 6px; cursor: pointer;
+    font-size: 14px; font-weight: 500; transition: all 0.2s;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.2); }
+  .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .nav-btn.primary { background: var(--accent); border-color: var(--accent); }
+  .nav-btn.primary:hover { background: #0284c7; }
+
+  /* ── Keyboard hint ── */
+  .kbd { display: inline-block; background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; border: 1px solid rgba(255,255,255,0.2); }
+
+  /* ── Flow Diagram ── */
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .flow-step { background: var(--primary); color: white; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: center; }
+  .flow-arrow { color: var(--gray-400); font-size: 20px; }
+  .flow-step.alt { background: var(--success); }
+  .flow-step.warn { background: var(--warning); color: var(--gray-900); }
+
+  /* ── Card grid ── */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .info-card { background: var(--gray-50); border-radius: 10px; padding: 16px; border: 1px solid var(--gray-200); }
+  .info-card h4 { font-size: 15px; font-weight: 600; color: var(--primary-dark); margin-bottom: 6px; }
+  .info-card p { font-size: 13px; color: var(--gray-600); line-height: 1.5; }
+
+  @media print {
+    body { background: white; }
+    .slide { display: flex !important; opacity: 1 !important; transform: none !important; position: relative !important; page-break-after: always; }
+    .nav-bar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="presentation" id="presentation">
+
+<!-- ═══════════════ SLIDE 1: TITLE ═══════════════ -->
+<div class="slide slide-title active" id="slide-1">
+  <div class="logo">N</div>
+  <h1>Nigcomsat PMS</h1>
+  <h2>Staff Training Guide</h2>
+  <p class="subtitle">Performance Management System — Learn how to login, set goals, track initiatives, complete reviews, and view your scorecard</p>
+</div>
+
+<!-- ═══════════════ SLIDE 2: AGENDA ═══════════════ -->
+<div class="slide slide-two-col" id="slide-2">
+  <h2>What We'll Cover Today</h2>
+  <p class="sub">A complete walkthrough of every feature in the PMS</p>
+  <div class="columns">
+    <div class="col">
+      <h3>Getting Started</h3>
+      <ul class="bullets">
+        <li><strong>Login &amp; Onboarding</strong> — First-time setup</li>
+        <li><strong>Dashboard Overview</strong> — Employee &amp; Supervisor views</li>
+        <li><strong>Navigation</strong> — Sidebar menu &amp; permissions</li>
+      </ul>
+      <h3 style="margin-top:20px;">Core Features</h3>
+      <ul class="bullets">
+        <li><strong>Goals</strong> — Setting &amp; tracking performance goals</li>
+        <li><strong>Initiatives</strong> — Assigning &amp; tracking work</li>
+        <li><strong>Scorecards</strong> — Goal scoring &amp; evaluation</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>Reviews &amp; More</h3>
+      <ul class="bullets">
+        <li><strong>Performance Reviews</strong> — Self &amp; supervisor reviews</li>
+        <li><strong>Notifications</strong> — Staying informed in real-time</li>
+        <li><strong>Calendar</strong> — Visual timeline of deadlines</li>
+      </ul>
+      <h3 style="margin-top:20px;">Role-Specific</h3>
+      <ul class="bullets">
+        <li><strong>Supervisor Features</strong> — Approvals, scoring, team view</li>
+        <li><strong>Admin Features</strong> — Org, users, roles, cycles</li>
+        <li><strong>FAQ &amp; Glossary</strong> — Common questions &amp; terms</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: LOGIN ═══════════════ -->
+<div class="slide slide-section" id="slide-3">
+  <div class="section-number">01</div>
+  <h1>Getting Started</h1>
+  <p>Logging in, onboarding, and navigating the system</p>
+</div>
+
+<div class="slide slide-steps" id="slide-4">
+  <h2>First-Time Login (Onboarding)</h2>
+  <p class="sub">When your account is created, you'll receive an email with a setup link</p>
+  <div class="steps-list">
+    <div class="step-item">
+      <div class="step-num">1</div>
+      <div class="step-text"><p>Click the <strong>onboarding link</strong> in your email from the administrator</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">2</div>
+      <div class="step-text"><p>You'll see the <strong>"Set Up Your Password"</strong> page — enter a new password (at least 8 characters)</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div class="step-text"><p>Confirm your password by typing it again, then click <strong>"Complete Setup"</strong></p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4</div>
+      <div class="step-text"><p>You'll see a success message — you'll be redirected to the <strong>Login page</strong></p></div>
+    </div>
+  </div>
+  <div class="tip-box">
+    <span class="tip-icon">💡</span>
+    <p><strong>Tip:</strong> Use a mix of letters, numbers, and special characters for a strong password.</p>
+  </div>
+</div>
+
+<div class="slide slide-steps" id="slide-5">
+  <h2>Regular Login &amp; Password Reset</h2>
+  <p class="sub">How to sign in every day and recover a forgotten password</p>
+  <div class="steps-list">
+    <div class="step-item">
+      <div class="step-num">1</div>
+      <div class="step-text"><p>Open your browser and go to the <strong>PMS website address</strong></p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">2</div>
+      <div class="step-text"><p>Enter your <strong>email address</strong> and <strong>password</strong> on the Sign In page</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div class="step-text"><p>Click <strong>"Sign in"</strong> — you'll land on your Dashboard</p></div>
+    </div>
+  </div>
+  <div class="warning-box" style="margin-top:8px;">
+    <span class="warn-icon">⚠️</span>
+    <p><strong>Session Timeout:</strong> Your session expires after 30 minutes of inactivity. You'll see a notification and be redirected to the login page.</p>
+  </div>
+  <div style="margin-top:20px;">
+    <h3 style="font-size:16px; color:var(--primary); margin-bottom:10px;">🔑 Forgot Password?</h3>
+    <ul class="bullets">
+      <li>Click <strong>"Forgot your password?"</strong> on the login page</li>
+      <li>Enter your email address and submit</li>
+      <li>You'll receive a password reset link via email</li>
+      <li>Click the link and set a new password</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: DASHBOARD ═══════════════ -->
+<div class="slide slide-section" id="slide-6">
+  <div class="section-number">02</div>
+  <h1>Your Dashboard</h1>
+  <p>Understanding the home screen — what you see depends on your role</p>
+</div>
+
+<div class="slide slide-two-col" id="slide-7">
+  <h2>Dashboard: Employee vs Supervisor</h2>
+  <p class="sub">The dashboard automatically adjusts based on whether you manage other staff</p>
+  <div class="columns">
+    <div class="col">
+      <h3>👤 Employee Dashboard</h3>
+      <ul class="bullets">
+        <li><strong>My Initiatives</strong> — total count, in-progress</li>
+        <li><strong>Completed</strong> — initiatives approved</li>
+        <li><strong>My Goals</strong> — total count, active</li>
+        <li><strong>Pending Approval</strong> — awaiting supervisor</li>
+        <li><strong>Upcoming Initiatives</strong> — due within 7 days</li>
+        <li><strong>My Goals sidebar</strong> — progress bars</li>
+        <li><strong>Quick Actions</strong> — Manage Initiatives / Goals</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>👥 Supervisor Dashboard</h3>
+      <ul class="bullets">
+        <li><strong>Pending Approvals</strong> — team items needing your review</li>
+        <li><strong>Team Members</strong> — count of supervisees</li>
+        <li><strong>My Initiatives</strong> — your own work</li>
+        <li><strong>My Goals</strong> — your personal goals</li>
+        <li><strong>Requires Your Approval</strong> — highlighted yellow section</li>
+        <li><strong>Team Performance</strong> — supervisee goals overview</li>
+        <li><strong>Quick Actions</strong> — Team Initiatives / Goals / My</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: NAVIGATION ═══════════════ -->
+<div class="slide slide-section" id="slide-8">
+  <div class="section-number">03</div>
+  <h1>Navigation</h1>
+  <p>The sidebar is your primary way to move around the system</p>
+</div>
+
+<div class="slide slide-table" id="slide-9">
+  <h2>Sidebar Menu</h2>
+  <p class="sub">Menu items you see depend on your permissions</p>
+  <table>
+    <thead>
+      <tr><th>Menu Item</th><th>Icon</th><th>Who Can See It</th><th>What It Does</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Dashboard</strong></td><td>🏠</td><td>All users</td><td>Home page with overview</td></tr>
+      <tr><td><strong>Initiatives</strong></td><td>☑️</td><td>All users</td><td>Manage work assignments</td></tr>
+      <tr><td><strong>Goals</strong></td><td>🎯</td><td>All users</td><td>Set &amp; track performance goals</td></tr>
+      <tr><td><strong>Calendar</strong></td><td>📅</td><td>All users</td><td>Visual timeline of deadlines</td></tr>
+      <tr><td><strong>Reviews</strong></td><td>⭐</td><td>All users</td><td>Complete review questionnaires</td></tr>
+      <tr><td><strong>Organization</strong></td><td>🏢</td><td>Admin only</td><td>Manage org structure</td></tr>
+      <tr><td><strong>Users</strong></td><td>👥</td><td>Admin only</td><td>Manage user accounts</td></tr>
+      <tr><td><strong>Roles</strong></td><td>🛡️</td><td>Admin only</td><td>Manage roles &amp; permissions</td></tr>
+      <tr><td><strong>Goals Management</strong></td><td>🎯</td><td>Admin only</td><td>Manage org-wide goals &amp; tags</td></tr>
+      <tr><td><strong>Review Management</strong></td><td>⭐</td><td>Admin only</td><td>Create &amp; manage review cycles</td></tr>
+      <tr><td><strong>Performance Mgmt</strong></td><td>📈</td><td>Admin only</td><td>View organization-wide scores</td></tr>
+      <tr><td><strong>Settings</strong></td><td>⚙️</td><td>All users</td><td>Update your profile</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════ SECTION: GOALS ═══════════════ -->
+<div class="slide slide-section" id="slide-10">
+  <div class="section-number">04</div>
+  <h1>Goals</h1>
+  <p>Setting, tracking, and scoring performance goals</p>
+</div>
+
+<div class="slide slide-table" id="slide-11">
+  <h2>Goal Types</h2>
+  <p class="sub">There are three types of goals, each with different visibility and creation rules</p>
+  <table>
+    <thead><tr><th>Goal Type</th><th>Who Creates It</th><th>Scope</th><th>Approval Required?</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-blue">Individual</span></td><td>Any employee or supervisor</td><td>Personal to the employee</td><td>Yes — supervisor must approve</td></tr>
+      <tr><td><span class="badge badge-purple">Company-Wide</span></td><td>Admin with goal_create_yearly</td><td>Entire organization</td><td>No — becomes Active immediately</td></tr>
+      <tr><td><span class="badge badge-yellow">Departmental</span></td><td>Admin with goal_create_departmental</td><td>Specific department/directorate</td><td>No — becomes Active immediately</td></tr>
+    </tbody>
+  </table>
+  <div class="tip-box" style="margin-top:16px;">
+    <span class="tip-icon">💡</span>
+    <p><strong>For employees:</strong> New individual goals start as "Pending Approval" and need your supervisor's sign-off before they become active.</p>
+  </div>
+</div>
+
+<div class="slide slide-steps" id="slide-12">
+  <h2>Creating an Individual Goal</h2>
+  <p class="sub">How to set your own performance goal</p>
+  <div class="steps-list">
+    <div class="step-item">
+      <div class="step-num">1</div>
+      <div class="step-text"><p>Go to <strong>Goals</strong> → click <strong>"+ Create Goal"</strong></p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">2</div>
+      <div class="step-text"><p>Enter a <strong>Goal Title</strong> (clear and specific, e.g., "Increase customer satisfaction by 15%")</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div class="step-text"><p>Add a <strong>Description</strong> (optional) — use the rich text editor for detail</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4</div>
+      <div class="step-text"><p>Set <strong>Difficulty Level</strong> (1=Very Easy to 5=Very Hard) — this weights the goal in your scorecard</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">5</div>
+      <div class="step-text"><p>Add <strong>KPIs</strong> — click "Add KPI" for each measurable target (description + target value + unit)</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="slide slide-steps" id="slide-13">
+  <h2>Creating a Goal (continued)</h2>
+  <p class="sub">Setting the time period and optional details</p>
+  <div class="steps-list">
+    <div class="step-item">
+      <div class="step-num">6</div>
+      <div class="step-text"><p>Select <strong>Time Period</strong>: Yearly or Quarterly (if Quarterly, pick the quarter and year)</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">7</div>
+      <div class="step-text"><p>Optionally set <strong>Start Date</strong> and <strong>End Date</strong></p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">8</div>
+      <div class="step-text"><p>Optionally <strong>link to a parent organizational goal</strong> (departmental goals that cascade down)</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">9</div>
+      <div class="step-text"><p>Optionally add <strong>Tags</strong> to categorize the goal</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">10</div>
+      <div class="step-text"><p>Click <strong>"Create Goal"</strong> — it will appear as <span class="badge badge-yellow">Pending Approval</span> until your supervisor approves it</p></div>
+    </div>
+  </div>
+  <div class="warning-box">
+    <span class="warn-icon">⚠️</span>
+    <p><strong>Important:</strong> New individual goals need supervisor approval. Contact your supervisor if they haven't reviewed it.</p>
+  </div>
+</div>
+
+<div class="slide slide-table" id="slide-14">
+  <h2>Goal Status Lifecycle</h2>
+  <p class="sub">Every goal goes through these statuses</p>
+  <table>
+    <thead><tr><th>Status</th><th>What It Means</th><th>What You Can Do</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-yellow">Pending Approval</span></td><td>Newly created, waiting for supervisor</td><td>Employee: wait. Supervisor: Approve or Reject.</td></tr>
+      <tr><td><span class="badge badge-blue">Active</span></td><td>Approved and currently in progress</td><td>Update progress, request changes, mark complete, or discard.</td></tr>
+      <tr><td><span class="badge badge-green">Completed</span></td><td>Employee marked the goal as 100% done</td><td>Supervisor: Score the goal (0–5).</td></tr>
+      <tr><td><span class="badge badge-green">Achieved</span></td><td>Supervisor scored and confirmed</td><td>View only. Goal is finalized.</td></tr>
+      <tr><td><span class="badge badge-red">Rejected</span></td><td>Supervisor rejected this goal</td><td>Review the reason and create a new goal if needed.</td></tr>
+      <tr><td><span class="badge badge-gray">Discarded</span></td><td>Employee chose to discard this goal</td><td>No further action needed.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="slide slide-steps" id="slide-15">
+  <h2>Updating Goal Progress &amp; Completing</h2>
+  <p class="sub">How to track your progress throughout the period</p>
+  <div class="steps-list">
+    <div class="step-item">
+      <div class="step-num">1</div>
+      <div class="step-text"><p>Go to <strong>Goals</strong> → find your active goal → click the <strong>⋮ menu</strong></p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">2</div>
+      <div class="step-text"><p>Select <strong>"Update Progress"</strong> — enter a percentage (0–100) and write a progress report</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div class="step-text"><p>At <strong>100%</strong>, you'll also fill in <strong>KPI Actuals</strong> (the actual values you achieved for each KPI) and an optional comment</p></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">4</div>
+      <div class="step-text"><p>Click <strong>"Mark as Complete"</strong> — the goal status changes to <span class="badge badge-green">Completed</span></p></div>
+    </div>
+  </div>
+  <div style="margin-top:16px;">
+    <h3 style="font-size:16px; color:var(--primary); margin-bottom:8px;">Other Goal Actions:</h3>
+    <ul class="bullets">
+      <li><strong>Request Change</strong> — Ask your supervisor to modify an active goal</li>
+      <li><strong>Accept / Decline</strong> — Respond when a supervisor assigns you a goal</li>
+      <li><strong>Discard Goal</strong> — Remove a goal you no longer need</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: INITIATIVES ═══════════════ -->
+<div class="slide slide-section" id="slide-16">
+  <div class="section-number">05</div>
+  <h1>Initiatives</h1>
+  <p>Assigning, tracking, and completing work assignments</p>
+</div>
+
+<div class="slide slide-two-col" id="slide-17">
+  <h2>What Are Initiatives?</h2>
+  <p class="sub">Initiatives are specific work assignments that contribute toward your goals</p>
+  <div class="columns">
+    <div class="col">
+      <h3>📋 Individual Initiative</h3>
+      <ul class="bullets">
+        <li>Assigned to <strong>one person</strong></li>
+        <li>You can assign it to yourself or a colleague</li>
+        <li>Has a title, description, priority, and due date</li>
+        <li>Can optionally be <strong>linked to a goal</strong></li>
+        <li>Can have <strong>sub-tasks</strong> for checkable milestones</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>👥 Group Initiative</h3>
+      <ul class="bullets">
+        <li>Assigned to <strong>2 or more people</strong></li>
+        <li>Requires a <strong>Team Head</strong> who submits on behalf of the group</li>
+        <li>Same fields as individual, plus team member selection</li>
+        <li>Everyone can see the initiative in their list</li>
+        <li>Team Head is responsible for final submission</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tip-box" style="margin-top:16px;">
+    <span class="tip-icon">💡</span>
+    <p><strong>Think of it this way:</strong> A <strong>Goal</strong> defines <em>what</em> you want to achieve. An <strong>Initiative</strong> defines <em>how</em> you'll achieve it.</p>
+  </div>
+</div>
+
+<div class="slide slide-steps" id="slide-18">
+  <h2>Creating an Initiative</h2>
+  <p class="sub">Step-by-step guide to creating a new work assignment</p>
+  <div class="steps-list">
+    <div class="step-item"><div class="step-num">1</div><div class="step-text"><p>Go to <strong>Initiatives</strong> → click <strong>"+ Create Initiative"</strong></p></div></div>
+    <div class="step-item"><div class="step-num">2</div><div class="step-text"><p>Enter a <strong>Title</strong> and optional <strong>Description</strong></p></div></div>
+    <div class="step-item"><div class="step-num">3</div><div class="step-text"><p>Select <strong>Type</strong>: Individual or Group</p></div></div>
+    <div class="step-item"><div class="step-num">4</div><div class="step-text"><p>Set <strong>Priority</strong>: Low, Medium, High, or Urgent</p></div></div>
+    <div class="step-item"><div class="step-num">5</div><div class="step-text"><p>Choose a <strong>Due Date</strong> (must be in the future)</p></div></div>
+    <div class="step-item"><div class="step-num">6</div><div class="step-text"><p>Optionally <strong>link to a Goal</strong> and add <strong>Sub-tasks</strong></p></div></div>
+    <div class="step-item"><div class="step-num">7</div><div class="step-text"><p>Optionally <strong>attach documents</strong> (up to 5 files, 10MB each)</p></div></div>
+    <div class="step-item"><div class="step-num">8</div><div class="step-text"><p>Click <strong>"Create"</strong></p></div></div>
+  </div>
+</div>
+
+<div class="slide slide-table" id="slide-19">
+  <h2>Initiative Status Lifecycle</h2>
+  <p class="sub">Every initiative goes through these stages</p>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th><th>Who Acts Next</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-yellow">Pending Approval</span></td><td>Created by employee, awaiting supervisor</td><td>Supervisor: approve or reject</td></tr>
+      <tr><td><span class="badge badge-blue">Assigned</span></td><td>Assigned to someone, waiting to be accepted</td><td>Assignee: accept the initiative</td></tr>
+      <tr><td><span class="badge badge-blue">Pending</span></td><td>Accepted, ready to begin work</td><td>Assignee: click "Start Initiative"</td></tr>
+      <tr><td><span class="badge badge-green">Ongoing</span></td><td>Work is in progress</td><td>Assignee: submit when done</td></tr>
+      <tr><td><span class="badge badge-yellow">Under Review</span></td><td>Submitted for supervisor review</td><td>Supervisor: grade and provide feedback</td></tr>
+      <tr><td><span class="badge badge-green">Approved</span></td><td>Supervisor approved with a grade</td><td>Initiative is complete</td></tr>
+      <tr><td><span class="badge badge-red">Rejected</span></td><td>Supervisor rejected the submission</td><td>Assignee: address feedback and resubmit</td></tr>
+      <tr><td><span class="badge badge-red">Overdue</span></td><td>Past the due date without completion</td><td>Assignee: submit ASAP</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="slide slide-two-col" id="slide-20">
+  <h2>Initiative Workflow: Two Perspectives</h2>
+  <p class="sub">Different actions depending on your role</p>
+  <div class="columns">
+    <div class="col">
+      <h3>👤 As the Assignee (Employee)</h3>
+      <ul class="bullets">
+        <li><strong>Receive</strong> the initiative assignment</li>
+        <li><strong>Accept</strong> it if status is "Assigned"</li>
+        <li><strong>Start</strong> working on it</li>
+        <li><strong>Track sub-tasks</strong> by checking them off</li>
+        <li><strong>Submit</strong> with a completion report + files</li>
+        <li>If rejected, read the <strong>redo instructions</strong> and resubmit</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>👥 As the Supervisor (Reviewer)</h3>
+      <ul class="bullets">
+        <li><strong>Create &amp; assign</strong> initiatives to supervisees</li>
+        <li><strong>Approve/reject</strong> initiatives pending approval</li>
+        <li>When status is <strong>"Under Review"</strong>, click <strong>"Review Initiative"</strong></li>
+        <li>Select a <strong>Grade (1–10)</strong>:
+          <br>1–3 = Poor | 4–6 = Fair | 7–8 = Good | 9–10 = Excellent</li>
+        <li>Enter <strong>feedback</strong> (optional for approval, required for rejection)</li>
+        <li>Click <strong>"Accept &amp; Grade"</strong> or <strong>"Reject"</strong></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: SCORECARDS ═══════════════ -->
+<div class="slide slide-section" id="slide-21">
+  <div class="section-number">06</div>
+  <h1>Scorecards</h1>
+  <p>How goals are scored and performance is evaluated</p>
+</div>
+
+<div class="slide slide-two-col" id="slide-22">
+  <h2>How Goal Scoring Works</h2>
+  <p class="sub">Supervisors rate completed goals on a 0–5 scale</p>
+  <div class="columns">
+    <div class="col">
+      <h3>Supervisor Score (0–5)</h3>
+      <table style="width:100%; font-size:14px;">
+        <tr><td><strong>0</strong></td><td>Not achieved at all</td></tr>
+        <tr><td><strong>1</strong></td><td>Very poor — far below expectations</td></tr>
+        <tr><td><strong>2</strong></td><td>Below expectations</td></tr>
+        <tr><td><strong>3</strong></td><td>Meets expectations</td></tr>
+        <tr><td><strong>4</strong></td><td>Exceeds expectations</td></tr>
+        <tr><td><strong>5</strong></td><td>Outstanding performance</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <h3>KPI Auto-Scoring</h3>
+      <p style="font-size:14px; color:var(--gray-600); line-height:1.6; margin-bottom:12px;">
+        If a goal has KPIs defined, the system calculates a <strong>KPI score</strong> automatically:
+      </p>
+      <div style="background:var(--gray-50); padding:14px; border-radius:8px; border:1px solid var(--gray-200);">
+        <p style="font-size:15px; font-weight:600; color:var(--primary); text-align:center;">
+          KPI Score = min(Actual ÷ Target, 1) × 5
+        </p>
+      </div>
+      <p style="font-size:13px; color:var(--gray-500); margin-top:10px;">
+        <strong>Example:</strong> Target = 30, Actual = 27<br>
+        Score = min(27/30, 1) × 5 = <strong>4.5 / 5</strong>
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="slide slide-steps" id="slide-23">
+  <h2>How to Score a Goal (Supervisor)</h2>
+  <p class="sub">When an employee marks a goal as "Completed", you score it</p>
+  <div class="steps-list">
+    <div class="step-item"><div class="step-num">1</div><div class="step-text"><p>Go to <strong>Goals → Team tab</strong> and find goals with <span class="badge badge-green">Completed</span> status</p></div></div>
+    <div class="step-item"><div class="step-num">2</div><div class="step-text"><p>Click the <strong>⋮ menu</strong> → <strong>"Score Goal"</strong></p></div></div>
+    <div class="step-item"><div class="step-num">3</div><div class="step-text"><p>Review the employee's <strong>KPI actuals</strong> and their comment</p></div></div>
+    <div class="step-item"><div class="step-num">4</div><div class="step-text"><p>Enter your <strong>Score (0–5)</strong> and an optional <strong>Comment</strong></p></div></div>
+    <div class="step-item"><div class="step-num">5</div><div class="step-text"><p>Optionally set an <strong>Achievement Override</strong>: "Mark as Achieved", "Not Achieved", or "Auto" (let the system decide)</p></div></div>
+    <div class="step-item"><div class="step-num">6</div><div class="step-text"><p>Click <strong>"Submit Score"</strong></p></div></div>
+  </div>
+</div>
+
+<div class="slide slide-two-col" id="slide-24">
+  <h2>Overall Performance Score Formula</h2>
+  <p class="sub">How the system calculates your final performance rating</p>
+  <div class="columns">
+    <div class="col">
+      <h3>Review Score per Trait</h3>
+      <div style="background:var(--gray-50); padding:16px; border-radius:10px; border:1px solid var(--gray-200); margin-bottom:16px;">
+        <p style="font-size:16px; font-weight:600; color:var(--primary); text-align:center;">
+          Self × 20% + Peer × 30% + Supervisor × 50%
+        </p>
+      </div>
+      <p style="font-size:14px; color:var(--gray-600);">Each performance trait gets a weighted average of ratings from different reviewers.</p>
+    </div>
+    <div class="col">
+      <h3>Overall Performance</h3>
+      <div style="background:var(--gray-50); padding:16px; border-radius:10px; border:1px solid var(--gray-200); margin-bottom:16px;">
+        <p style="font-size:16px; font-weight:600; color:var(--primary); text-align:center;">
+          Task Performance × 60% + Review Performance × 40%
+        </p>
+      </div>
+      <p style="font-size:14px; color:var(--gray-600);">Combines initiative/task grades with review scores.</p>
+    </div>
+  </div>
+  <h3 style="font-size:16px; color:var(--primary); margin-top:20px;">Performance Bands</h3>
+  <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin-top:10px;">
+    <div style="background:#d1fae5; padding:12px 8px; border-radius:8px; text-align:center;"><strong style="color:#065f46;">Outstanding</strong><br><span style="font-size:12px; color:#065f46;">Exceptional</span></div>
+    <div style="background:#bbf7d0; padding:12px 8px; border-radius:8px; text-align:center;"><strong style="color:#166534;">Exceeds</strong><br><span style="font-size:12px; color:#166534;">Above standard</span></div>
+    <div style="background:#dbeafe; padding:12px 8px; border-radius:8px; text-align:center;"><strong style="color:#1e40af;">Meets</strong><br><span style="font-size:12px; color:#1e40af;">At expected</span></div>
+    <div style="background:#fef3c7; padding:12px 8px; border-radius:8px; text-align:center;"><strong style="color:#92400e;">Below</strong><br><span style="font-size:12px; color:#92400e;">Needs work</span></div>
+    <div style="background:#fee2e2; padding:12px 8px; border-radius:8px; text-align:center;"><strong style="color:#991b1b;">Needs Improv.</strong><br><span style="font-size:12px; color:#991b1b;">Significantly below</span></div>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: REVIEWS ═══════════════ -->
+<div class="slide slide-section" id="slide-25">
+  <div class="section-number">07</div>
+  <h1>Performance Reviews</h1>
+  <p>Formal assessments conducted during review cycles</p>
+</div>
+
+<div class="slide slide-steps" id="slide-26">
+  <h2>Completing a Self-Review</h2>
+  <p class="sub">How to evaluate your own performance during a review cycle</p>
+  <div class="steps-list">
+    <div class="step-item"><div class="step-num">1</div><div class="step-text"><p>Go to <strong>Reviews</strong> in the sidebar</p></div></div>
+    <div class="step-item"><div class="step-num">2</div><div class="step-text"><p>Select a <strong>Review Cycle</strong> from the dropdown (e.g., "Q1 2025 Performance Review")</p></div></div>
+    <div class="step-item"><div class="step-num">3</div><div class="step-text"><p>Under the <strong>Self</strong> tab, find your self-review assignment</p></div></div>
+    <div class="step-item"><div class="step-num">4</div><div class="step-text"><p>Click <strong>"Start Review"</strong> — you'll see questions organized by trait</p></div></div>
+    <div class="step-item"><div class="step-num">5</div><div class="step-text"><p>For each question, <strong>select a rating (1–10)</strong> and add comments if available</p></div></div>
+    <div class="step-item"><div class="step-num">6</div><div class="step-text"><p>Your progress saves automatically — you can leave and come back</p></div></div>
+    <div class="step-item"><div class="step-num">7</div><div class="step-text"><p>When all questions are answered, the review is marked <span class="badge badge-green">Completed</span></p></div></div>
+  </div>
+</div>
+
+<div class="slide slide-two-col" id="slide-27">
+  <h2>Review Types</h2>
+  <p class="sub">Two types of reviews happen during each cycle</p>
+  <div class="columns">
+    <div class="col">
+      <h3>📝 Self-Review</h3>
+      <ul class="bullets">
+        <li>You evaluate <strong>your own</strong> performance</li>
+        <li>Answer questions about your work, skills, and achievements</li>
+        <li>Rating scale: <strong>1–10</strong> per question</li>
+        <li>Organized by <strong>traits</strong> (e.g., Communication, Leadership)</li>
+        <li>Self scores carry <strong>20% weight</strong></li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>👥 Supervisor Review</h3>
+      <ul class="bullets">
+        <li>Your supervisor evaluates <strong>your</strong> performance</li>
+        <li>Same traits and questions, but from the manager's perspective</li>
+        <li>Rating scale: <strong>1–10</strong> per question</li>
+        <li>Supervisor scores carry <strong>50% weight</strong></li>
+        <li>Found under the <strong>"Supervisee"</strong> tab</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tip-box" style="margin-top:16px;">
+    <span class="tip-icon">💡</span>
+    <p><strong>Review Cycles</strong> are created by administrators and can be Quarterly, Annual, Probationary, or Project-based. You'll receive a notification when a review cycle is launched.</p>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: NOTIFICATIONS ═══════════════ -->
+<div class="slide slide-section" id="slide-28">
+  <div class="section-number">08</div>
+  <h1>Notifications</h1>
+  <p>Real-time alerts to keep you informed</p>
+</div>
+
+<div class="slide slide-two-col" id="slide-29">
+  <h2>Staying Informed</h2>
+  <p class="sub">The PMS sends real-time notifications for important events</p>
+  <div class="columns">
+    <div class="col">
+      <h3>🔔 Goal Notifications</h3>
+      <ul class="bullets">
+        <li><strong>Goal Assigned</strong> — a goal was assigned to you</li>
+        <li><strong>Goal Approved</strong> — your goal was approved</li>
+        <li><strong>Goal Rejected</strong> — your goal was rejected (with reason)</li>
+        <li><strong>Goal Progress Updated</strong> — progress on a goal changed</li>
+        <li><strong>Goal Deadline Approaching</strong> — a goal is due soon</li>
+      </ul>
+      <h3 style="margin-top:16px;">📋 Task Notifications</h3>
+      <ul class="bullets">
+        <li><strong>Task Assigned / Submitted / Reviewed</strong></li>
+        <li><strong>Task Deadline Approaching</strong></li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>📋 Initiative Notifications</h3>
+      <ul class="bullets">
+        <li><strong>Initiative Assigned</strong> — new work assigned to you</li>
+        <li><strong>Initiative Approved / Rejected</strong> — review result</li>
+        <li><strong>Initiative Submitted</strong> — supervisee submitted work</li>
+        <li><strong>Initiative Reviewed</strong> — your submission was graded</li>
+        <li><strong>Initiative Deadline Approaching</strong> — due soon</li>
+      </ul>
+      <h3 style="margin-top:16px;">👤 System Notifications</h3>
+      <ul class="bullets">
+        <li><strong>Role Changed</strong> — your permissions were updated</li>
+        <li><strong>Status Changed</strong> — your account status changed</li>
+      </ul>
+    </div>
+  </div>
+  <div class="tip-box">
+    <span class="tip-icon">💡</span>
+    <p><strong>How to view:</strong> Click the 🔔 bell icon in the top-right corner. The number badge shows unread count. On the Notifications page, filter by type or priority, and mark items as read.</p>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: SUPERVISOR ═══════════════ -->
+<div class="slide slide-section" id="slide-30">
+  <div class="section-number">09</div>
+  <h1>Supervisor Features</h1>
+  <p>Additional capabilities if you manage other staff members</p>
+</div>
+
+<div class="slide slide-table" id="slide-31">
+  <h2>Supervisor Responsibilities</h2>
+  <p class="sub">What you need to do as a supervisor in the PMS</p>
+  <table>
+    <thead><tr><th>Action</th><th>Where</th><th>What You Do</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Approve/Reject Goals</strong></td><td>Goals → Team tab</td><td>Review goals created by supervisees</td></tr>
+      <tr><td><strong>Score Completed Goals</strong></td><td>Goals → Team tab</td><td>Rate supervisee goals on a 0–5 scale</td></tr>
+      <tr><td><strong>Create Goals for Supervisees</strong></td><td>Goals → Create Goal</td><td>Check "Create for supervisee" and select the person</td></tr>
+      <tr><td><strong>Approve/Reject Initiatives</strong></td><td>Initiatives → Team tab</td><td>Review and approve or reject supervisee initiatives</td></tr>
+      <tr><td><strong>Review Initiative Submissions</strong></td><td>Initiatives → Team tab</td><td>Grade (1–10) and provide feedback on completed work</td></tr>
+      <tr><td><strong>Complete Supervisor Reviews</strong></td><td>Reviews → Supervisee tab</td><td>Evaluate your supervisees during review cycles</td></tr>
+    </tbody>
+  </table>
+  <div class="warning-box" style="margin-top:12px;">
+    <span class="warn-icon">⚠️</span>
+    <p><strong>Dashboard Alerts:</strong> Your supervisor dashboard highlights pending approvals in yellow. Review them promptly — your team is waiting!</p>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: ADMIN ═══════════════ -->
+<div class="slide slide-section" id="slide-32">
+  <div class="section-number">10</div>
+  <h1>Admin Features</h1>
+  <p>Management tools available to administrators</p>
+</div>
+
+<div class="slide slide-table" id="slide-33">
+  <h2>Admin Dashboard Overview</h2>
+  <p class="sub">Administrators see a "Management" section in the sidebar with these tools</p>
+  <table>
+    <thead><tr><th>Tool</th><th>What It Does</th><th>Key Actions</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Organization</strong></td><td>Manage org structure</td><td>Create/edit directorates, departments, divisions, units</td></tr>
+      <tr><td><strong>Users</strong></td><td>Manage user accounts</td><td>Create, edit, suspend, activate, archive users; assign roles &amp; supervisors</td></tr>
+      <tr><td><strong>Roles</strong></td><td>Manage roles &amp; permissions</td><td>Create custom roles with granular permissions; set scope (Org/Global/Cross-Directorate)</td></tr>
+      <tr><td><strong>Goals Management</strong></td><td>Manage org-wide goals</td><td>Create company-wide &amp; departmental goals; freeze/unfreeze quarters; manage tags</td></tr>
+      <tr><td><strong>Review Management</strong></td><td>Manage review cycles</td><td>Create cycles; define traits &amp; questions; launch reviews; monitor progress</td></tr>
+      <tr><td><strong>Performance Mgmt</strong></td><td>View organization performance</td><td>Filter by department &amp; cycle; view individual employee scores &amp; scorecards</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="slide slide-two-col" id="slide-34">
+  <h2>Organization Hierarchy &amp; User Management</h2>
+  <p class="sub">How the organizational structure works and user lifecycle</p>
+  <div class="columns">
+    <div class="col">
+      <h3>🏢 5-Level Org Hierarchy</h3>
+      <div style="background:var(--gray-50); padding:16px; border-radius:10px; border:1px solid var(--gray-200);">
+        <p style="font-size:14px; line-height:2; color:var(--gray-700);">
+          🌍 <strong>Global</strong> (Company-wide)<br>
+          &nbsp;&nbsp;└── 🏛️ <strong>Directorate</strong> (e.g., Operations)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 🏢 <strong>Department</strong> (e.g., HR)<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 <strong>Division</strong><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 👥 <strong>Unit</strong> (Teams)
+        </p>
+      </div>
+      <p style="font-size:13px; color:var(--gray-500); margin-top:8px;">Users at higher levels can see data from all levels below them.</p>
+    </div>
+    <div class="col">
+      <h3>👤 User Account Statuses</h3>
+      <ul class="bullets">
+        <li><span class="badge badge-blue">Pending Activation</span> — Created but hasn't set password</li>
+        <li><span class="badge badge-green">Active</span> — Fully set up and can use the system</li>
+        <li><span class="badge badge-red">Suspended</span> — Temporarily disabled</li>
+        <li><span class="badge badge-yellow">On Leave</span> — User is on leave</li>
+        <li><span class="badge badge-gray">Archived</span> — Permanently deactivated</li>
+      </ul>
+      <h3 style="margin-top:16px;">🔑 Scope Options</h3>
+      <ul class="bullets">
+        <li><strong>None</strong> — Access limited to own department and below</li>
+        <li><strong>Global</strong> — Access to all data across the system</li>
+        <li><strong>Cross-Directorate</strong> — Access across multiple directorates</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SECTION: FAQ ═══════════════ -->
+<div class="slide slide-section" id="slide-35">
+  <div class="section-number">11</div>
+  <h1>FAQ &amp; Glossary</h1>
+  <p>Common questions and key terms</p>
+</div>
+
+<div class="slide slide-two-col" id="slide-36">
+  <h2>Frequently Asked Questions</h2>
+  <p class="sub">Answers to the most common questions from staff</p>
+  <div class="columns">
+    <div class="col">
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>Why is my goal showing "Pending Approval"?</h4>
+        <p>All new individual goals need supervisor approval before becoming active. Contact your supervisor.</p>
+      </div>
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>Can I edit a goal after it's approved?</h4>
+        <p>Use "Request Change" on an active goal. Your supervisor will review the request.</p>
+      </div>
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>What are KPIs and do I have to add them?</h4>
+        <p>KPIs are measurable targets. They're optional but recommended — e.g., "Achieve 30% increase" with target 30 and unit %.</p>
+      </div>
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>What's the difference between a Goal and an Initiative?</h4>
+        <p>A <strong>Goal</strong> defines WHAT you want to achieve. An <strong>Initiative</strong> defines HOW you'll achieve it.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>Can I assign an initiative to a group?</h4>
+        <p>Yes! Select "Group" as the type, choose at least 2 members, and designate a Team Head.</p>
+      </div>
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>What happens when I submit an initiative?</h4>
+        <p>Your supervisor receives a notification and will grade it (1–10) with feedback. Approved = complete. Rejected = redo with instructions.</p>
+      </div>
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>When will I receive a review assignment?</h4>
+        <p>When your administrator launches a review cycle. You'll get a notification.</p>
+      </div>
+      <div class="info-card" style="margin-bottom:12px;">
+        <h4>Can I save my review and come back later?</h4>
+        <p>Yes! Progress is saved automatically. You can leave and return at any time.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="slide slide-two-col" id="slide-37">
+  <h2>Glossary of Key Terms</h2>
+  <p class="sub">Quick reference for PMS terminology</p>
+  <div class="columns">
+    <div class="col">
+      <div class="info-card" style="margin-bottom:8px;"><h4>PMS</h4><p>Performance Management System — the application you're using</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Goal</h4><p>A performance target set for a specific period (yearly, quarterly, or departmental)</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>KPI</h4><p>Key Performance Indicator — a measurable target that tracks progress (e.g., "30% increase" with target 30, unit %)</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Initiative</h4><p>A specific work assignment or task that may be linked to a goal</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Scorecard</h4><p>A comprehensive evaluation combining goal scores, initiative grades, and review ratings</p></div>
+    </div>
+    <div class="col">
+      <div class="info-card" style="margin-bottom:8px;"><h4>Review Cycle</h4><p>A defined period during which performance reviews are conducted (Quarterly, Annual, etc.)</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Self-Review</h4><p>An assessment where you evaluate your own performance</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Supervisor Review</h4><p>An assessment where your manager evaluates your performance</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Trait</h4><p>A performance dimension (e.g., Communication, Leadership) evaluated during reviews</p></div>
+      <div class="info-card" style="margin-bottom:8px;"><h4>Difficulty Level</h4><p>A rating (1–5) that weights a goal's importance in the overall scorecard</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CLOSING ═══════════════ -->
+<div class="slide slide-title" id="slide-38" style="background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 40%, #0ea5e9 100%);">
+  <div style="font-size:64px; margin-bottom:20px;">🎓</div>
+  <h1 style="font-size:44px;">You're Ready!</h1>
+  <h2 style="font-size:22px; font-weight:400; opacity:0.9;">Start using the PMS today — set your goals, track your initiatives, and complete your reviews.</h2>
+  <div style="margin-top:40px; display:flex; gap:24px; justify-content:center; flex-wrap:wrap;">
+    <div style="background:rgba(255,255,255,0.15); padding:14px 24px; border-radius:12px; text-align:center;">
+      <div style="font-size:14px; opacity:0.8;">Need Help?</div>
+      <div style="font-size:16px; font-weight:600; margin-top:4px;">Contact your administrator</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.15); padding:14px 24px; border-radius:12px; text-align:center;">
+      <div style="font-size:14px; opacity:0.8;">Quick Start</div>
+      <div style="font-size:16px; font-weight:600; margin-top:4px;">Login → Goals → Create Goal</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.15); padding:14px 24px; border-radius:12px; text-align:center;">
+      <div style="font-size:14px; opacity:0.8;">Reference Guide</div>
+      <div style="font-size:16px; font-weight:600; margin-top:4px;">TRAINING-GUIDE.md</div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ── Navigation Bar ── -->
+<div class="nav-bar" id="navBar">
+  <button class="nav-btn" id="prevBtn" onclick="changeSlide(-1)">← Previous</button>
+  <div class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">38</span></div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:2.6%"></div></div>
+  <button class="nav-btn primary" id="nextBtn" onclick="changeSlide(1)">Next →</button>
+  <div style="margin-left:12px; font-size:12px; opacity:0.5;">
+    <span class="kbd">←</span> <span class="kbd">→</span> or click buttons
+  </div>
+</div>
+
+<script>
+  let currentSlide = 1;
+  const totalSlides = 38;
+
+  function showSlide(n) {
+    const slides = document.querySelectorAll('.slide');
+    slides.forEach(s => { s.classList.remove('active'); s.style.display = 'none'; });
+    currentSlide = Math.max(1, Math.min(n, totalSlides));
+    const active = document.getElementById('slide-' + currentSlide);
+    if (active) {
+      active.style.display = 'flex';
+      requestAnimationFrame(() => active.classList.add('active'));
+    }
+    document.getElementById('currentSlide').textContent = currentSlide;
+    document.getElementById('progressFill').style.width = ((currentSlide / totalSlides) * 100) + '%';
+    document.getElementById('prevBtn').disabled = currentSlide === 1;
+    document.getElementById('nextBtn').disabled = currentSlide === totalSlides;
+  }
+
+  function changeSlide(dir) {
+    showSlide(currentSlide + dir);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); changeSlide(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); changeSlide(-1); }
+    if (e.key === 'Home') { e.preventDefault(); showSlide(1); }
+    if (e.key === 'End') { e.preventDefault(); showSlide(totalSlides); }
+  });
+
+  // Touch swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(diff) > 50) { changeSlide(diff < 0 ? 1 : -1); }
+  });
+
+  showSlide(1);
+</script>
+
+</body>
+</html>

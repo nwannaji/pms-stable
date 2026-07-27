@@ -1,13 +1,16 @@
 """
-Email service using SMTP (Office365 / GovMail)
+Email service using SMTP (Galaxy Backbone relay / Office365 / GovMail)
 Handles all email notifications for the PMS
 """
 
 import os
 import smtplib
+import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 # SMTP configuration from environment
 SMTP_HOST = os.getenv("SMTP_HOST", "mail.govmail.gbb.com.ng")
@@ -27,9 +30,13 @@ class EmailService:
         html: str,
         reply_to: Optional[str] = None
     ):
-        """Send email via SMTP — tries SMTP_SSL first, falls back to STARTTLS"""
+        """Send email via SMTP — tries STARTTLS first (best for submission ports),
+           then falls back to SMTP_SSL, then plain SMTP.
+           Tries the configured port first, then standard fallbacks.
+        """
         import ssl
-        print(f"[EMAIL] Host={SMTP_HOST} Port={SMTP_PORT} User={SMTP_USERNAME} Pass={SMTP_PASSWORD} From={FROM_EMAIL} To={to}")
+
+        logger.info(f"[EMAIL] Sending to {to} via {SMTP_HOST}:{SMTP_PORT} (user={SMTP_USERNAME})")
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
@@ -46,14 +53,8 @@ class EmailService:
 
         last_error = None
 
-        def try_ssl(port):
-            with smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=15) as server:
-                if SMTP_USERNAME:
-                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.sendmail(FROM_EMAIL, to, msg.as_string())
-
         def try_starttls(port):
-            with smtplib.SMTP(SMTP_HOST, port, timeout=15) as server:
+            with smtplib.SMTP(SMTP_HOST, port, timeout=30) as server:
                 server.ehlo()
                 server.starttls(context=ctx)
                 server.ehlo()
@@ -61,21 +62,28 @@ class EmailService:
                     server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.sendmail(FROM_EMAIL, to, msg.as_string())
 
+        def try_ssl(port):
+            with smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=30) as server:
+                if SMTP_USERNAME:
+                    server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.sendmail(FROM_EMAIL, to, msg.as_string())
+
         def try_plain(port):
-            with smtplib.SMTP(SMTP_HOST, port, timeout=15) as server:
+            with smtplib.SMTP(SMTP_HOST, port, timeout=30) as server:
                 server.ehlo()
                 if SMTP_USERNAME:
                     server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.sendmail(FROM_EMAIL, to, msg.as_string())
 
-        # Ports to try: configured first, then standard fallbacks
-        # (465=SSL, 587=STARTTLS, 25=plain, 1025=dev)
+        # Connection strategy: try STARTTLS first (most submission ports use this),
+        # then SMTP_SSL, then plain. Try configured port first, then standard fallbacks.
+        # (465=SSL, 587=STARTTLS, 25=plain relay, 1707=Galaxy Backbone submission)
         attempts = [
-            (SMTP_PORT, "SMTP_SSL",   try_ssl),
             (SMTP_PORT, "STARTTLS",   try_starttls),
+            (SMTP_PORT, "SMTP_SSL",  try_ssl),
             (SMTP_PORT, "plain",      try_plain),
-            (465,       "SMTP_SSL",   try_ssl),
             (587,       "STARTTLS",   try_starttls),
+            (465,       "SMTP_SSL",   try_ssl),
             (25,        "plain",      try_plain),
         ]
 
@@ -90,15 +98,15 @@ class EmailService:
 
         for port, method, fn in unique_attempts:
             try:
-                print(f"[EMAIL] Trying {method} on port {port}...")
+                logger.info(f"[EMAIL] Trying {method} on port {port}...")
                 fn(port)
-                print(f"[EMAIL] Sent OK via {method}:{port} to {to}")
+                logger.info(f"[EMAIL] Sent OK via {method}:{port} to {to}")
                 return {"success": True, "to": to}
             except Exception as e:
                 last_error = e
-                print(f"[EMAIL] {method}:{port} failed: {e}")
+                logger.warning(f"[EMAIL] {method}:{port} failed: {e}")
 
-        print(f"[EMAIL] All attempts failed — Host={SMTP_HOST} LastError={last_error}")
+        logger.error(f"[EMAIL] All attempts failed — Host={SMTP_HOST} LastError={last_error}")
         raise last_error
 
     @staticmethod
@@ -342,6 +350,417 @@ class EmailService:
         return EmailService.send_email(
             to=[user_email],
             subject="Reset Your Nigcomsat PMS Password",
+            html=html
+        )
+
+    @staticmethod
+    def send_initiative_approved_email(
+        assignee_email: str,
+        assignee_name: str,
+        approver_name: str,
+        initiative_title: str,
+        initiative_id: str,
+        due_date: str
+    ):
+        """Send initiative approval notification to assignee"""
+        initiative_link = f"{FRONTEND_URL}/dashboard/initiatives?id={initiative_id}"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #37352f;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 40px 20px;
+                    background-color: #ffffff;
+                }}
+                .container {{
+                    background: #ffffff;
+                    border: 1px solid #e9e9e7;
+                    border-radius: 8px;
+                    overflow: hidden;
+                }}
+                .header {{
+                    padding: 40px 40px 32px;
+                    border-bottom: 1px solid #e9e9e7;
+                }}
+                .header h1 {{
+                    color: #37352f;
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 600;
+                    letter-spacing: -0.01em;
+                }}
+                .content {{
+                    padding: 32px 40px;
+                }}
+                .content p {{
+                    margin: 0 0 16px;
+                    color: #37352f;
+                    font-size: 14px;
+                    line-height: 1.6;
+                }}
+                .success-box {{
+                    background: #f7f6f3;
+                    padding: 20px;
+                    border-radius: 6px;
+                    margin: 20px 0;
+                    border-left: 3px solid #4caf50;
+                }}
+                .success-box p {{
+                    margin: 8px 0;
+                    font-size: 14px;
+                    color: #37352f;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background: #37352f;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    font-weight: 500;
+                    font-size: 14px;
+                    transition: background 0.2s;
+                }}
+                .button:hover {{
+                    background: #2f2e2a;
+                }}
+                .footer {{
+                    padding: 32px 40px;
+                    background: #f7f6f3;
+                    text-align: center;
+                    color: #787774;
+                    font-size: 13px;
+                    line-height: 1.5;
+                }}
+                .footer p {{
+                    margin: 8px 0;
+                }}
+                .link-box {{
+                    background: #f7f6f3;
+                    padding: 16px;
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    word-break: break-all;
+                    font-size: 13px;
+                    color: #787774;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Initiative Approved</h1>
+                </div>
+                <div class="content">
+                    <p>Hello {assignee_name},</p>
+                    <p>Great news! <strong>{approver_name}</strong> has approved your initiative.</p>
+                    <div class="success-box">
+                        <p><strong>Initiative:</strong> {initiative_title}</p>
+                        <p><strong>Approved by:</strong> {approver_name}</p>
+                        <p><strong>Due Date:</strong> {due_date}</p>
+                        <p><strong>Status:</strong> APPROVED</p>
+                    </div>
+                    <p>You can now start working on this initiative. Please ensure timely completion.</p>
+                    <center>
+                        <a href="{initiative_link}" class="button">View Initiative</a>
+                    </center>
+                    <p>Or copy and paste this link in your browser:</p>
+                    <div class="link-box">{initiative_link}</div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from Nigcomsat Performance Management System</p>
+                    <p>&copy; 2024 Nigcomsat. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return EmailService.send_email(
+            to=[assignee_email],
+            subject=f"Initiative Approved: {initiative_title}",
+            html=html
+        )
+
+    @staticmethod
+    def send_initiative_rejected_email(
+        creator_email: str,
+        creator_name: str,
+        supervisor_name: str,
+        initiative_title: str,
+        initiative_id: str,
+        rejection_reason: str
+    ):
+        """Send initiative rejection notification to creator"""
+        initiative_link = f"{FRONTEND_URL}/dashboard/initiatives?id={initiative_id}"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #37352f;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 40px 20px;
+                    background-color: #ffffff;
+                }}
+                .container {{
+                    background: #ffffff;
+                    border: 1px solid #e9e9e7;
+                    border-radius: 8px;
+                    overflow: hidden;
+                }}
+                .header {{
+                    padding: 40px 40px 32px;
+                    border-bottom: 1px solid #e9e9e7;
+                }}
+                .header h1 {{
+                    color: #37352f;
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 600;
+                    letter-spacing: -0.01em;
+                }}
+                .content {{
+                    padding: 32px 40px;
+                }}
+                .content p {{
+                    margin: 0 0 16px;
+                    color: #37352f;
+                    font-size: 14px;
+                    line-height: 1.6;
+                }}
+                .error-box {{
+                    background: #f7f6f3;
+                    padding: 20px;
+                    border-radius: 6px;
+                    margin: 20px 0;
+                    border-left: 3px solid #e53935;
+                }}
+                .error-box p {{
+                    margin: 8px 0;
+                    font-size: 14px;
+                    color: #37352f;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background: #37352f;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    font-weight: 500;
+                    font-size: 14px;
+                    transition: background 0.2s;
+                }}
+                .button:hover {{
+                    background: #2f2e2a;
+                }}
+                .footer {{
+                    padding: 32px 40px;
+                    background: #f7f6f3;
+                    text-align: center;
+                    color: #787774;
+                    font-size: 13px;
+                    line-height: 1.5;
+                }}
+                .footer p {{
+                    margin: 8px 0;
+                }}
+                .link-box {{
+                    background: #f7f6f3;
+                    padding: 16px;
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    word-break: break-all;
+                    font-size: 13px;
+                    color: #787774;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Initiative Not Approved</h1>
+                </div>
+                <div class="content">
+                    <p>Hello {creator_name},</p>
+                    <p>Your supervisor <strong>{supervisor_name}</strong> has not approved your initiative.</p>
+                    <div class="error-box">
+                        <p><strong>Initiative:</strong> {initiative_title}</p>
+                        <p><strong>Reviewed by:</strong> {supervisor_name}</p>
+                        <p><strong>Reason:</strong> {rejection_reason}</p>
+                    </div>
+                    <p>Please review the feedback and make necessary adjustments. You can edit and resubmit your initiative for approval.</p>
+                    <center>
+                        <a href="{initiative_link}" class="button">View Initiative</a>
+                    </center>
+                    <p>Or copy and paste this link in your browser:</p>
+                    <div class="link-box">{initiative_link}</div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from Nigcomsat Performance Management System</p>
+                    <p>&copy; 2024 Nigcomsat. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return EmailService.send_email(
+            to=[creator_email],
+            subject=f"Initiative Not Approved: {initiative_title}",
+            html=html
+        )
+
+    @staticmethod
+    def send_initiative_assignment_email(
+        user_email: str,
+        user_name: str,
+        initiative_title: str,
+        initiative_id: str,
+        due_date: str,
+        created_by_name: str
+    ):
+        """Send initiative assignment notification"""
+        initiative_link = f"{FRONTEND_URL}/dashboard/initiatives?id={initiative_id}"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #37352f;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 40px 20px;
+                    background-color: #ffffff;
+                }}
+                .container {{
+                    background: #ffffff;
+                    border: 1px solid #e9e9e7;
+                    border-radius: 8px;
+                    overflow: hidden;
+                }}
+                .header {{
+                    padding: 40px 40px 32px;
+                    border-bottom: 1px solid #e9e9e7;
+                }}
+                .header h1 {{
+                    color: #37352f;
+                    margin: 0;
+                    font-size: 20px;
+                    font-weight: 600;
+                    letter-spacing: -0.01em;
+                }}
+                .content {{
+                    padding: 32px 40px;
+                }}
+                .content p {{
+                    margin: 0 0 16px;
+                    color: #37352f;
+                    font-size: 14px;
+                    line-height: 1.6;
+                }}
+                .task-card {{
+                    background: #f7f6f3;
+                    border-left: 3px solid #37352f;
+                    padding: 20px;
+                    margin: 20px 0;
+                    border-radius: 4px;
+                }}
+                .task-card h3 {{
+                    margin: 0 0 12px;
+                    color: #37352f;
+                    font-size: 16px;
+                    font-weight: 600;
+                }}
+                .task-card p {{
+                    margin: 8px 0;
+                    font-size: 14px;
+                    color: #37352f;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background: #37352f;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    font-weight: 500;
+                    font-size: 14px;
+                    transition: background 0.2s;
+                }}
+                .button:hover {{
+                    background: #2f2e2a;
+                }}
+                .footer {{
+                    padding: 32px 40px;
+                    background: #f7f6f3;
+                    text-align: center;
+                    color: #787774;
+                    font-size: 13px;
+                    line-height: 1.5;
+                }}
+                .link-box {{
+                    background: #f7f6f3;
+                    padding: 16px;
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    word-break: break-all;
+                    font-size: 13px;
+                    color: #787774;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>New Initiative Assigned</h1>
+                </div>
+                <div class="content">
+                    <p>Hello {user_name},</p>
+                    <p>You have been assigned a new initiative by <strong>{created_by_name}</strong>.</p>
+                    <div class="task-card">
+                        <h3>{initiative_title}</h3>
+                        <p><strong>Due Date:</strong> {due_date}</p>
+                        <p><strong>Assigned by:</strong> {created_by_name}</p>
+                    </div>
+                    <center>
+                        <a href="{initiative_link}" class="button">View Initiative</a>
+                    </center>
+                    <p>Or copy and paste this link in your browser:</p>
+                    <div class="link-box">{initiative_link}</div>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from Nigcomsat Performance Management System</p>
+                    <p>&copy; 2024 Nigcomsat. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return EmailService.send_email(
+            to=[user_email],
+            subject=f"New Initiative Assigned: {initiative_title}",
             html=html
         )
 

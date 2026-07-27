@@ -65,7 +65,7 @@ def get_task_service(db: Session = Depends(get_db)) -> TaskWorkflowService:
     return TaskWorkflowService(db)
 
 
-@router.get("/", response_model=TaskList)
+@router.get("", response_model=TaskList)
 async def get_tasks(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
@@ -255,7 +255,7 @@ async def upload_task_document(
 
     return TaskDocument.from_orm(document)
 
-@router.post("/", response_model=TaskSchema)
+@router.post("", response_model=TaskSchema)
 async def create_task(
     task_data: TaskCreate,
     current_user: UserSession = Depends(get_current_user),

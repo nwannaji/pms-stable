@@ -23,7 +23,7 @@ router = APIRouter(tags=["organizations"])
 def get_permission_service(db: Session = Depends(get_db)) -> UserPermissions:
     return UserPermissions(db)
 
-@router.get("/", response_model=List[OrganizationSchema])
+@router.get("", response_model=List[OrganizationSchema])
 async def get_organizations(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -101,7 +101,7 @@ async def get_organization_tree(
     tree = build_tree(root_org)
     return OrganizationTree(organization=tree)
 
-@router.post("/", response_model=OrganizationSchema)
+@router.post("", response_model=OrganizationSchema)
 async def create_organization(
     organization_data: OrganizationCreate,
     current_user: UserSession = Depends(get_current_user),

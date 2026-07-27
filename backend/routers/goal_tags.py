@@ -15,7 +15,7 @@ from utils.auth import get_current_user, UserSession
 router = APIRouter(prefix="/api/goal-tags", tags=["Goal Tags"])
 
 
-@router.get("/", response_model=List[GoalTagSchema])
+@router.get("", response_model=List[GoalTagSchema])
 async def get_all_tags(
     db: Session = Depends(get_db),
     current_user: UserSession = Depends(get_current_user)
@@ -25,7 +25,7 @@ async def get_all_tags(
     return tags
 
 
-@router.post("/", response_model=GoalTagSchema)
+@router.post("", response_model=GoalTagSchema)
 async def create_tag(
     tag_data: GoalTagCreate,
     db: Session = Depends(get_db),

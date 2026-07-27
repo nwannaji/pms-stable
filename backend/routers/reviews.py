@@ -404,7 +404,7 @@ async def start_review_cycle(
     return {"message": f"Review cycle started with {len(participants)} participants"}
 
 # Review endpoints
-@router.get("/", response_model=List[ReviewResponse])
+@router.get("", response_model=List[ReviewResponse])
 async def get_reviews(
     cycle_id: Optional[int] = None,
     reviewee_id: Optional[int] = None,
@@ -432,7 +432,7 @@ async def get_reviews(
     reviews = query.all()
     return reviews
 
-@router.post("/", response_model=ReviewResponse)
+@router.post("", response_model=ReviewResponse)
 async def create_review(
     review_data: ReviewCreate,
     current_user: User = Depends(get_current_user),

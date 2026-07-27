@@ -701,7 +701,7 @@ function OrganizationalGoalForm({ goal, isOpen, onClose, onSubmit, canCreateYear
               </div>
               <div className="space-y-2">
                 {formData.kpis.length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No KPIs added yet. Click "Add KPI" to add one.</p>
+                  <p className="text-sm text-gray-500 italic">No KPIs added yet. Click &ldquo;Add KPI&rdquo; to add one.</p>
                 )}
                 {formData.kpis.map((kpi, index) => (
                   <div key={typeof kpi === 'object' ? kpi.id : index} className="border border-gray-200 rounded-md p-3 space-y-2 bg-gray-50">
@@ -1151,7 +1151,7 @@ function IndividualGoalForm({ goal, isOpen, onClose, onSubmit, canCreateForSuper
               </div>
               <div className="space-y-2">
                 {formData.kpis.length === 0 && (
-                  <p className="text-sm text-gray-500 italic">No KPIs added yet. Click "Add KPI" to add one.</p>
+                  <p className="text-sm text-gray-500 italic">No KPIs added yet. Click &ldquo;Add KPI&rdquo; to add one.</p>
                 )}
                 {formData.kpis.map((kpi, index) => (
                   <div key={typeof kpi === 'object' ? kpi.id : index} className="border border-gray-200 rounded-md p-3 space-y-2 bg-gray-50">

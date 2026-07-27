@@ -3,7 +3,7 @@ User Management API Router
 Based on CLAUDE.md specification with comprehensive user management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -25,6 +25,28 @@ from utils.permissions import UserPermissions, SystemPermissions
 from utils.email_service import EmailService
 
 router = APIRouter(tags=["users"])
+
+def _send_onboarding_email_bg(user_email: str, user_name: str, onboarding_token: str):
+    """Send onboarding email in background to avoid proxy timeouts"""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from utils.email_service import EmailService
+        EmailService.send_onboarding_email(user_email, user_name, onboarding_token)
+        logger.info(f"✓ Onboarding email sent to {user_email}")
+    except Exception as e:
+        logger.error(f"✗ Failed to send onboarding email to {user_email}: {e}", exc_info=True)
+
+def _send_password_reset_email_bg(user_email: str, user_name: str, reset_token: str):
+    """Send password reset email in background to avoid proxy timeouts"""
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        from utils.email_service import EmailService
+        EmailService.send_password_reset_email(user_email, user_name, reset_token)
+        logger.info(f"✓ Password reset email sent to {user_email}")
+    except Exception as e:
+        logger.error(f"✗ Failed to send password reset email to {user_email}: {e}", exc_info=True)
 
 def get_permission_service(db: Session = Depends(get_db)) -> UserPermissions:
     return UserPermissions(db)
@@ -195,6 +217,7 @@ async def get_users(
 @router.post("", response_model=UserSchema)
 async def create_user(
     user_data: UserCreate,
+    background_tasks: BackgroundTasks,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service)
@@ -275,13 +298,8 @@ async def create_user(
     db.commit()
     db.refresh(user)
 
-    # Send onboarding email
-    try:
-        from utils.notifications import NotificationService
-        notification_service = NotificationService(db)
-        notification_service.notify_user_created(user, onboarding_token)
-    except Exception as e:
-        print(f"✗ Failed to send onboarding email: {e}")
+    # Send onboarding email in background to avoid proxy timeouts
+    background_tasks.add_task(_send_onboarding_email_bg, user.email, user.name, onboarding_token)
 
     return UserSchema(**enhance_user_with_supervisor(user, db))
 
@@ -864,6 +882,7 @@ async def assign_supervisor(
 @router.post("/{user_id}/resend-onboarding")
 async def resend_onboarding_email(
     user_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service)
@@ -923,14 +942,8 @@ async def resend_onboarding_email(
         raise HTTPException(status_code=500, detail=f"Failed to save onboarding token: {str(e)}")
     db.refresh(user)
 
-    # Resend onboarding email
-    try:
-        from utils.notifications import NotificationService
-        notification_service = NotificationService(db)
-        notification_service.notify_user_created(user, onboarding_token)
-    except Exception as e:
-        print(f"✗ Failed to send onboarding email: {e}")
-        raise HTTPException(status_code=502, detail=f"Token generated but email delivery failed: {str(e)}")
+    # Send onboarding email in background to avoid proxy timeouts
+    background_tasks.add_task(_send_onboarding_email_bg, user.email, user.name, onboarding_token)
 
     return {
         "message": "Onboarding email resent successfully",
@@ -940,6 +953,7 @@ async def resend_onboarding_email(
 @router.post("/{user_id}/send-password-reset")
 async def send_password_reset_link(
     user_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service)
@@ -999,14 +1013,8 @@ async def send_password_reset_link(
         raise HTTPException(status_code=500, detail=f"Failed to save reset token: {str(e)}")
     db.refresh(user)
 
-    # Send password reset email
-    try:
-        from utils.notifications import NotificationService
-        notification_service = NotificationService(db)
-        notification_service.notify_password_reset(user, reset_token)
-    except Exception as e:
-        print(f"✗ Failed to send password reset email: {e}")
-        raise HTTPException(status_code=502, detail=f"Token generated but email delivery failed: {str(e)}")
+    # Send password reset email in background to avoid proxy timeouts
+    background_tasks.add_task(_send_password_reset_email_bg, user.email, user.name, reset_token)
 
     return {
         "message": "Password reset link sent successfully",

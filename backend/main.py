@@ -29,7 +29,8 @@ logger.info(f"CORS Allowed Origins: {CORS_ALLOWED_ORIGINS}")
 app = FastAPI(
     title="NIGCOMSAT PMS API",
     description="Performance Management System for Nigerian Communications Satellite Limited",
-    version="2.0.0"
+    version="2.0.0",
+    redirect_slashes=False
 )
 
 app.state.limiter = limiter
@@ -40,8 +41,19 @@ app.add_middleware(
     allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Forwarded-Proto", "X-Forwarded-Host"],
 )
+
+# Trust X-Forwarded-* headers from IIS reverse proxy
+PROXY_HOSTS = config("PROXY_TRUSTED_HOSTS", default="localhost,127.0.0.1").split(",")
+PROXY_HOSTS = [h.strip() for h in PROXY_HOSTS]
+
+# Conditionally add HTTPS redirect in production behind reverse proxy
+ENVIRONMENT = config("ENVIRONMENT", default="development")
+if ENVIRONMENT == "production":
+    # When behind IIS with SSL termination, we trust X-Forwarded-Proto
+    # Do NOT use HTTPSRedirectMiddleware — IIS handles the redirect to HTTPS
+    logger.info("Running in production mode behind reverse proxy")
 
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
@@ -73,4 +85,6 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Bind to 0.0.0.0 so the backend is reachable at the public IP (160.226.0.67)
+    # as well as localhost, since IIS reverse proxy forwards to the public IP
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=(ENVIRONMENT != "production"))

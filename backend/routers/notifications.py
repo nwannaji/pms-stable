@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import Optional
 from datetime import datetime
+import json
 from uuid import UUID
 
 from database import get_db
@@ -28,39 +29,39 @@ router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(...),
-    db: Session = Depends(get_db)
+    token: str = Query(...)
 ):
     """
     WebSocket endpoint for real-time notifications
     Connect with: ws://host/api/notifications/ws?token=<jwt_token>
+
+    Note: We do NOT use Depends(get_db) here because WebSocket connections
+    are long-lived. A dependency-injected DB session would expire mid-connection.
+    Instead, we create short-lived sessions only when needed for DB operations.
     """
     # Validate token and get user
+    # Use a short-lived DB session for authentication only
+    from database import SessionLocal
+    from jose import jwt, JWTError
+    from utils.auth import SECRET_KEY, ALGORITHM
+    import uuid as uuid_mod
+
+    auth_db = SessionLocal()
+    user_id = None
     try:
-        from utils.auth import get_current_user, security
-        from fastapi.security import HTTPAuthorizationCredentials
-
-        # Create credentials object from token
-        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-
-        # Get user from token
-        from jose import jwt, JWTError
-        from utils.auth import SECRET_KEY, ALGORITHM
-        import uuid
-
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_id_str: str = payload.get("sub")
             if user_id_str is None:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
-            user_id = uuid.UUID(user_id_str)
+            user_id = uuid_mod.UUID(user_id_str)
         except JWTError:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
         # Verify user exists and is active
-        user = db.query(User).filter(User.id == user_id).first()
+        user = auth_db.query(User).filter(User.id == user_id).first()
         if not user or user.status != UserStatus.ACTIVE:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
@@ -69,6 +70,9 @@ async def websocket_endpoint(
         logger.error(f"WebSocket authentication error: {e}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
+    finally:
+        # Close the authentication DB session immediately
+        auth_db.close()
 
     # Connect user
     await manager.connect(websocket, user_id)
@@ -89,11 +93,22 @@ async def websocket_endpoint(
             if data == "ping":
                 await websocket.send_text("pong")
 
+            # Handle JSON ping from frontend
+            elif data.startswith("{"):
+                try:
+                    msg = json.loads(data)
+                    if msg.get("type") == "ping":
+                        await websocket.send_json({"type": "pong", "timestamp": datetime.utcnow().isoformat()})
+                except (json.JSONDecodeError, KeyError):
+                    pass
+
             # Handle mark as read requests
             elif data.startswith("mark_read:"):
+                # Use a short-lived DB session for this operation
+                op_db = SessionLocal()
                 try:
                     notification_id = UUID(data.split(":")[1])
-                    notification = db.query(Notification).filter(
+                    notification = op_db.query(Notification).filter(
                         Notification.id == notification_id,
                         Notification.user_id == user_id
                     ).first()
@@ -101,7 +116,7 @@ async def websocket_endpoint(
                     if notification:
                         notification.is_read = True
                         notification.read_at = datetime.utcnow()
-                        db.commit()
+                        op_db.commit()
 
                         await websocket.send_json({
                             "type": "marked_read",
@@ -109,6 +124,8 @@ async def websocket_endpoint(
                         })
                 except Exception as e:
                     logger.error(f"Error marking notification as read: {e}")
+                finally:
+                    op_db.close()
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)

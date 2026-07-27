@@ -23,7 +23,7 @@ router = APIRouter(tags=["roles"])
 def get_permission_service(db: Session = Depends(get_db)) -> UserPermissions:
     return UserPermissions(db)
 
-@router.get("/", response_model=List[RoleSchema])
+@router.get("", response_model=List[RoleSchema])
 async def get_roles(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -49,7 +49,7 @@ async def get_roles(
 
     return role_list
 
-@router.post("/", response_model=RoleSchema)
+@router.post("", response_model=RoleSchema)
 async def create_role(
     role_data: RoleCreate,
     current_user: UserSession = Depends(get_current_user),

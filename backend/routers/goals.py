@@ -149,7 +149,7 @@ def enrich_goal_dict(goal_dict: dict, goal: Goal, db: Session) -> dict:
 
     return goal_dict
 
-@router.get("/", response_model=GoalList)
+@router.get("", response_model=GoalList)
 async def get_goals(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
@@ -828,7 +828,7 @@ async def request_goal_change(
 
     return GoalSchema.from_orm(goal)
 
-@router.post("/", response_model=GoalSchema)
+@router.post("", response_model=GoalSchema)
 async def create_goal(
     goal_data: GoalCreate,
     current_user: UserSession = Depends(get_current_user),

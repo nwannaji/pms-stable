@@ -411,7 +411,7 @@ export default function UserDetailPage() {
       <div className="flex flex-col items-center justify-center h-96">
         <User className="h-16 w-16 text-muted-foreground mb-4" />
         <h2 className="text-2xl font-bold mb-2">User Not Found</h2>
-        <p className="text-muted-foreground mb-4">The user you're looking for doesn't exist.</p>
+        <p className="text-muted-foreground mb-4">The user you&apos;re looking for doesn&apos;t exist.</p>
         <Button onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Go Back
@@ -721,7 +721,7 @@ export default function UserDetailPage() {
                 <div className="text-center py-12">
                   <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No goals yet</h3>
-                  <p className="text-muted-foreground">This user hasn't created any goals yet.</p>
+                  <p className="text-muted-foreground">This user hasn&apos;t created any goals yet.</p>
                 </div>
               )}
             </CardContent>
