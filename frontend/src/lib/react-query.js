@@ -978,7 +978,7 @@ export function useNotificationStats() {
   return useQuery({
     queryKey: QUERY_KEYS.NOTIFICATION_STATS,
     queryFn: notifications.getStats,
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 30000, // Refresh every 30 seconds — keeps badge in sync
   })
 }
 

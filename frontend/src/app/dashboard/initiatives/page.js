@@ -1681,8 +1681,6 @@ export default function InitiativesPage() {
   const startMutation = useStartInitiative()
   const completeMutation = useCompleteInitiative()
   const deleteMutation = useDeleteInitiative()
-  console.log(initiatives)
-
   const handleCreate = (data) => {
     if (data.id) {
       // Editing existing initiative

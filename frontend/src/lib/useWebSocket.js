@@ -4,12 +4,15 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAuth } from './auth-context'
 import { tokenUtils } from './api'
 
-// Clean up the WebSocket URL by removing any trailing paths
+// Build WebSocket URL from env var — code appends /api/notifications/ws automatically
 const getWebSocketURL = () => {
   const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
-  // Remove any trailing /ws, /api, or other paths to ensure clean base URL
-  return baseUrl.replace(/\/(ws|api).*$/, '')
+  // Strip any trailing slashes so concatenation is safe
+  return baseUrl.replace(/\/+$/, '')
 }
+
+// API base URL for polling fallback
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || ''
 
 const WEBSOCKET_URL = getWebSocketURL()
 
@@ -17,16 +20,22 @@ const WEBSOCKET_URL = getWebSocketURL()
 const INITIAL_RECONNECT_DELAY = 1000   // 1 second initial delay
 const MAX_RECONNECT_DELAY = 30000      // 30 seconds max delay
 const BACKOFF_MULTIPLIER = 1.5
-const MAX_RECONNECT_ATTEMPTS = 50      // Much higher limit — effectively keeps trying
+const MAX_RECONNECT_ATTEMPTS = 10      // Try 10 times, then fall back to polling
+
+// Polling config — used as fallback when WebSocket is unavailable
+const POLL_INTERVAL = 15000  // Poll every 15 seconds
 
 export function useWebSocket() {
   const { user } = useAuth()
   const [isConnected, setIsConnected] = useState(false)
   const [lastMessage, setLastMessage] = useState(null)
+  const [isPolling, setIsPolling] = useState(false)
   const wsRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const reconnectAttemptsRef = useRef(0)
   const intentionalCloseRef = useRef(false)
+  const pollingIntervalRef = useRef(null)
+  const lastPollTimestampRef = useRef(null)
 
   const getReconnectDelay = useCallback(() => {
     const attempt = reconnectAttemptsRef.current
@@ -38,6 +47,78 @@ export function useWebSocket() {
     // Add jitter (±25%) to avoid thundering herd
     const jitter = delay * 0.25 * (Math.random() * 2 - 1)
     return Math.max(500, delay + jitter)
+  }, [])
+
+  // Start polling as fallback when WebSocket is unavailable
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return // Already polling
+
+    console.log('WebSocket unavailable — switching to polling fallback')
+    setIsPolling(true)
+
+    const poll = async () => {
+      const token = tokenUtils.getToken()
+      if (!token) return
+
+      try {
+        // Fetch stats (unread count) — this is the most important for the bell badge
+        const statsResponse = await fetch(`${API_BASE_URL}/api/notifications/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json()
+          setLastMessage({
+            type: 'notification_stats',
+            stats
+          })
+        }
+
+        // Also fetch recent unread notifications
+        const response = await fetch(`${API_BASE_URL}/api/notifications?limit=20&unread_only=true`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+
+        if (!response.ok) return
+
+        const data = await response.json()
+
+        // Check for new notifications since last poll
+        if (data.notifications && data.notifications.length > 0) {
+          const lastTimestamp = lastPollTimestampRef.current
+          const newNotifications = lastTimestamp
+            ? data.notifications.filter(n => {
+                const notifTime = new Date(n.created_at).getTime()
+                return notifTime > lastTimestamp
+              })
+            : [] // First poll: don't re-emit existing notifications
+
+          lastPollTimestampRef.current = Date.now()
+
+          // Emit a single batch message with all new notifications
+          if (newNotifications.length > 0) {
+            setLastMessage({
+              type: 'new_notifications_batch',
+              notifications: newNotifications
+            })
+          }
+        }
+      } catch {
+        // Silently ignore polling errors — will retry next interval
+      }
+    }
+
+    // Poll immediately, then at regular intervals
+    poll()
+    pollingIntervalRef.current = setInterval(poll, POLL_INTERVAL)
+  }, [])
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+    setIsPolling(false)
   }, [])
 
   const connect = useCallback(() => {
@@ -68,14 +149,18 @@ export function useWebSocket() {
       }
 
       const wsUrl = `${WEBSOCKET_URL}/api/notifications/ws?token=${token}`
-      console.log('Connecting to WebSocket:', wsUrl)
+      console.log('Connecting to WebSocket...')
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
       ws.onopen = () => {
         console.log('WebSocket connected')
         setIsConnected(true)
+        setIsPolling(false)
         reconnectAttemptsRef.current = 0
+
+        // Stop polling if we were using it as fallback
+        stopPolling()
 
         // Start ping interval to keep connection alive
         const pingInterval = setInterval(() => {
@@ -101,12 +186,14 @@ export function useWebSocket() {
         }
       }
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
+      ws.onerror = () => {
+        // WebSocket error events don't carry useful messages — the onclose
+        // handler below is where we decide whether to retry
+        console.warn('WebSocket connection error')
       }
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected', event.code, event.reason)
+        console.log('WebSocket disconnected, code:', event.code, event.reason)
         setIsConnected(false)
 
         // Clear ping interval
@@ -119,14 +206,18 @@ export function useWebSocket() {
           return
         }
 
-        // Don't reconnect on policy violations (auth failed) or normal closures
-        // that indicate the server rejected us
+        // Start polling immediately so the badge updates right away.
+        // If WebSocket reconnects later, onopen will stop polling.
+        startPolling()
+
+        // Don't reconnect on policy violations (auth failed)
         if (event.code === 1008) {
-          console.warn('WebSocket closed with policy violation (auth failed), not reconnecting')
+          console.warn('WebSocket closed with policy violation (auth failed) — polling mode')
           return
         }
 
-        // Attempt to reconnect with exponential backoff
+        // Attempt to reconnect with exponential backoff in the background.
+        // If it succeeds, onopen will stop the polling fallback.
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           const delay = getReconnectDelay()
           reconnectAttemptsRef.current += 1
@@ -136,14 +227,15 @@ export function useWebSocket() {
             connect()
           }, delay)
         } else {
-          console.log('Max reconnection attempts reached. Will retry on next user action or page refresh.')
+          console.log('Max reconnection attempts reached — staying in polling mode')
         }
       }
 
     } catch (error) {
       console.error('Error establishing WebSocket connection:', error)
+      startPolling()
     }
-  }, [user, getReconnectDelay])
+  }, [user, getReconnectDelay, startPolling, stopPolling])
 
   // Connect on mount and when user changes
   useEffect(() => {
@@ -156,6 +248,9 @@ export function useWebSocket() {
       intentionalCloseRef.current = true
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
       }
       if (wsRef.current) {
         if (wsRef.current.pingInterval) {
@@ -176,11 +271,17 @@ export function useWebSocket() {
   }, [])
 
   const markAsRead = useCallback((notificationId) => {
-    sendMessage(`mark_read:${notificationId}`)
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      // Use WebSocket for immediate feedback
+      sendMessage(`mark_read:${notificationId}`)
+    }
+    // Always also call the REST API to ensure the change is persisted
+    // (handled by the notification context / react-query mutations)
   }, [sendMessage])
 
   return {
     isConnected,
+    isPolling,
     lastMessage,
     sendMessage,
     markAsRead,

@@ -21,8 +21,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useNotifications } from "@/lib/notification-context"
 import {
   useNotificationsQuery,
-  useMarkNotificationAsRead,
-  useMarkAllNotificationsAsRead,
+  useNotificationStats,
   useDeleteNotification
 } from "@/lib/react-query"
 import { useEffect } from "react"
@@ -31,7 +30,7 @@ import { formatDistanceToNow } from "date-fns"
 export function DashboardHeader() {
   const { user, logout } = useAuth()
   const router = useRouter()
-  const { unreadCount, isConnected, setInitialNotifications } = useNotifications()
+  const { unreadCount, isConnected, isPolling, setInitialNotifications, markAsRead: contextMarkAsRead, markAllAsRead: contextMarkAllAsRead } = useNotifications()
 
   // Fetch initial notifications
   const { data: notificationsData, isLoading } = useNotificationsQuery({
@@ -39,8 +38,10 @@ export function DashboardHeader() {
     unread_only: false
   })
 
-  const markAsReadMutation = useMarkNotificationAsRead()
-  const markAllAsReadMutation = useMarkAllNotificationsAsRead()
+  // Periodically refresh stats to keep the badge in sync even if
+  // WebSocket/polling messages are missed
+  const { data: statsData } = useNotificationStats()
+
   const deleteNotificationMutation = useDeleteNotification()
 
   // Set initial notifications when data loads
@@ -53,9 +54,25 @@ export function DashboardHeader() {
     }
   }, [notificationsData, setInitialNotifications])
 
+  // Sync stats-based unread count into context whenever it refreshes.
+  // This ensures the badge stays correct even if a real-time message is missed.
+  useEffect(() => {
+    if (statsData && typeof statsData.unread_count === 'number') {
+      // Only override if we're not connected via WebSocket (to avoid overwriting
+      // real-time increments). When polling, stats are the source of truth.
+      if (!isConnected) {
+        setInitialNotifications(
+          notificationsData?.notifications || [],
+          statsData.unread_count
+        )
+      }
+    }
+  }, [statsData, isConnected, notificationsData, setInitialNotifications])
+
   const handleNotificationClick = (notification) => {
     if (!notification.is_read) {
-      markAsReadMutation.mutate(notification.id)
+      // Context method: optimistic badge update + REST API persist + query invalidation
+      contextMarkAsRead(notification.id)
     }
     if (notification.action_url) {
       router.push(notification.action_url)
@@ -63,7 +80,8 @@ export function DashboardHeader() {
   }
 
   const handleMarkAllAsRead = () => {
-    markAllAsReadMutation.mutate()
+    // Context method: optimistic badge clear + REST API persist + query invalidation
+    contextMarkAllAsRead()
   }
 
   const handleDeleteNotification = (e, notificationId) => {
@@ -107,9 +125,12 @@ export function DashboardHeader() {
                 {unreadCount > 99 ? '99+' : unreadCount}
               </Badge>
             )}
-            {/* WebSocket connection indicator */}
+            {/* Connection indicator: green = WebSocket, orange = polling */}
             {isConnected && (
-              <span className="absolute bottom-0 right-0 h-2 w-2 bg-green-500 rounded-full border-2 border-background" />
+              <span className="absolute bottom-0 right-0 h-2 w-2 bg-green-500 rounded-full border-2 border-background" title="Live (WebSocket)" />
+            )}
+            {!isConnected && isPolling && (
+              <span className="absolute bottom-0 right-0 h-2 w-2 bg-orange-400 rounded-full border-2 border-background" title="Polling for updates" />
             )}
           </Button>
         </DropdownMenuTrigger>
