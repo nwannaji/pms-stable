@@ -137,8 +137,8 @@ export function AuthProvider({ children }) {
       // Redirect to login immediately (use replace to avoid history)
       router.replace('/login')
 
-      // Call logout API in background (no need to await)
-      auth.logout().catch(err => console.error('Logout API error:', err))
+      // Call logout API in background (best effort — token may already be expired)
+      auth.logout().catch(() => {})
     } catch (error) {
       console.error('Logout error:', error)
       // Ensure cleanup even on error
@@ -230,6 +230,13 @@ export function AuthGuard({ children, fallback = null }) {
   const { user, loading, loggingOut } = useAuth()
   const router = useRouter()
 
+  // Redirect to login if not authenticated (in useEffect to avoid setState during render)
+  useEffect(() => {
+    if (!loading && !loggingOut && !user) {
+      router.replace('/login')
+    }
+  }, [user, loading, loggingOut, router])
+
   // Show loading during initial load or logout
   if (loading || loggingOut) {
     return (
@@ -242,11 +249,8 @@ export function AuthGuard({ children, fallback = null }) {
     )
   }
 
-  // Redirect to login if not authenticated
+  // Don't render children until we confirm authentication
   if (!user) {
-    if (typeof window !== 'undefined') {
-      router.replace('/login')
-    }
     return null
   }
 
