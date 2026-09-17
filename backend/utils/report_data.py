@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from models import (
-    User, Goal, Initiative, InitiativeAssignment,
+    User, Goal, Initiative, InitiativeAssignment, InitiativeStatus,
     ActivityLog, ActivityAction, Notification, ReviewCycle, ReviewAssignment,
     PerformanceRecord,
 )

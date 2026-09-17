@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Pin the workspace root so Turbopack doesn't get confused by the stray
+  // package-lock.json in the user's home directory
+  turbopack: {
+    root: import.meta.dirname,
+  },
   async rewrites() {
     return [
       {

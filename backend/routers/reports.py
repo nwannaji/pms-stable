@@ -60,7 +60,7 @@ def preview_report(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     organization_id: Optional[UUID] = Query(None),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=1000),
     current_user: UserSession = Depends(get_current_user),
     db=Depends(get_db),
 ):

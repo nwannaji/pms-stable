@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -39,6 +39,30 @@ const cellText = (value) => {
   return String(value)
 }
 
+const TIMESTAMP_COLUMN_RE = /created|updated|login|logout|timestamp|exported/i
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// Timestamps arrive as ISO strings (e.g. 2026-01-20T05:22:12.336830-08:00);
+// render them as a readable local date + H:M:S am/pm time.
+const formatCell = (value, column) => {
+  const text = cellText(value)
+  if (!text || !TIMESTAMP_COLUMN_RE.test(column || '')) return text
+  const parsed = Date.parse(text)
+  if (Number.isNaN(parsed)) return text
+  const d = new Date(parsed)
+  if (DATE_ONLY_RE.test(text)) {
+    return d.toLocaleDateString()
+  }
+  const datePart = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  const timePart = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+  return `${datePart}, ${timePart}`
+}
+
+const PREVIEW_PAGE_SIZE = 15
+// Enough to cover the whole staff list in preview; the export always
+// includes every row regardless of this limit.
+const PREVIEW_FETCH_LIMIT = 500
+
 export default function ReportsPage() {
   const canGenerate = usePermission('reports_generate')
 
@@ -50,14 +74,20 @@ export default function ReportsPage() {
   const [dateTo, setDateTo] = useState('')
   const [orgId, setOrgId] = useState('')
   const [downloading, setDownloading] = useState(null)
+  const [page, setPage] = useState(1)
 
   const previewParams = useMemo(() => ({
     type: selectedType || undefined,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     organization_id: orgId || undefined,
-    limit: 50,
+    limit: PREVIEW_FETCH_LIMIT,
   }), [selectedType, dateFrom, dateTo, orgId])
+
+  // New filters mean new data — back to the first page
+  useEffect(() => {
+    setPage(1)
+  }, [selectedType, dateFrom, dateTo, orgId])
 
   const { data: preview, isFetching: previewLoading, error: previewError } =
     useReportPreview(canGenerate ? previewParams : null)
@@ -104,7 +134,13 @@ export default function ReportsPage() {
 
   const sections = preview?.sections || []
   const firstSection = sections[0]
-  const displayRows = firstSection?.rows?.slice(0, 15) || []
+  const allRows = firstSection?.rows || []
+  const totalPages = Math.max(1, Math.ceil(allRows.length / PREVIEW_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const displayRows = allRows.slice(
+    (currentPage - 1) * PREVIEW_PAGE_SIZE,
+    currentPage * PREVIEW_PAGE_SIZE,
+  )
 
   return (
     <div className="space-y-6 p-6">
@@ -192,7 +228,7 @@ export default function ReportsPage() {
               <CardTitle className="text-base">Preview</CardTitle>
               <CardDescription className="text-xs">
                 {preview
-                  ? `${firstSection?.title || 'Report'} — showing ${displayRows.length} of ${preview.total_rows} total rows`
+                  ? `${firstSection?.title || 'Report'} — showing ${allRows.length === 0 ? 0 : (currentPage - 1) * PREVIEW_PAGE_SIZE + 1}–${(currentPage - 1) * PREVIEW_PAGE_SIZE + displayRows.length} of ${preview.total_rows} total rows`
                   : 'Select a report type to preview'}
               </CardDescription>
             </div>
@@ -252,19 +288,53 @@ export default function ReportsPage() {
                 <TableBody>
                   {displayRows.map((row, i) => (
                     <TableRow key={i}>
-                      <TableCell className="text-gray-400">{i + 1}</TableCell>
+                      <TableCell className="text-gray-400">
+                        {(currentPage - 1) * PREVIEW_PAGE_SIZE + i + 1}
+                      </TableCell>
                       {row.map((cell, j) => (
                         <TableCell key={j} className="text-sm whitespace-nowrap max-w-[280px] truncate">
-                          {cellText(cell)}
+                          {formatCell(cell, firstSection.columns[j])}
                         </TableCell>
                       ))}
                     </TableRow>
                   ))}
+                  {allRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={firstSection.columns.length + 1} className="text-center text-sm text-gray-500 py-6">
+                        No rows match the current filters
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
-              {firstSection.rows.length > 15 && (
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between gap-2 mt-3">
+                  <p className="text-xs text-gray-500">
+                    Page {currentPage} of {totalPages}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage >= totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {preview.total_rows > allRows.length && (
                 <p className="text-xs text-gray-500 mt-2">
-                  Preview capped at 15 rows — the full {preview.total_rows} rows are included in the download.
+                  Preview limited to {allRows.length} rows — the full {preview.total_rows} rows are included in the download.
                 </p>
               )}
             </div>
