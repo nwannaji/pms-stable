@@ -3,7 +3,7 @@ User Management API Router
 Based on CLAUDE.md specification with comprehensive user management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 
 from database import get_db
-from models import User, UserStatus, UserHistory
+from models import User, UserStatus, UserHistory, ActivityAction
 from schemas.users import (
     UserCreate, UserUpdate, UserStatusUpdate, User as UserSchema,
     UserWithRelations, UserProfile, UserHistoryEntry, UserList
@@ -22,6 +22,7 @@ from schemas.users import (
 from schemas.auth import UserSession
 from utils.auth import get_current_user, get_password_hash, generate_onboarding_token
 from utils.permissions import UserPermissions, SystemPermissions
+from utils.activity import record_activity
 from utils.email_service import EmailService
 
 router = APIRouter(tags=["users"])
@@ -65,7 +66,8 @@ async def delete_user(
     user_id: uuid.UUID,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Permanently delete a user from the system
@@ -135,6 +137,10 @@ async def delete_user(
     # Delete the user
     db.delete(user)
     db.commit()
+
+    record_activity(db, action=ActivityAction.USER_DELETE, user=current_user,
+                    entity_type="user", entity_id=user_id, request=request,
+                    details={"name": user_name})
 
     return {
         "message": f"User {user_name} has been permanently deleted",
@@ -220,7 +226,8 @@ async def create_user(
     background_tasks: BackgroundTasks,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Create new user and send onboarding email
@@ -301,6 +308,10 @@ async def create_user(
     # Send onboarding email in background to avoid proxy timeouts
     background_tasks.add_task(_send_onboarding_email_bg, user.email, user.name, onboarding_token)
 
+    record_activity(db, action=ActivityAction.USER_CREATE, user=current_user,
+                    entity_type="user", entity_id=user.id, request=request,
+                    details={"email": user.email, "name": user.name})
+
     return UserSchema(**enhance_user_with_supervisor(user, db))
 
 # Self-service user endpoints (must be defined before /{user_id} routes)
@@ -342,7 +353,8 @@ async def get_my_profile(
 async def update_my_profile(
     profile_data: UserProfile,
     current_user: UserSession = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Self-edit limited profile fields
@@ -370,13 +382,18 @@ async def update_my_profile(
     db.commit()
     db.refresh(user)
 
+    record_activity(db, action=ActivityAction.PROFILE_UPDATE, user=current_user,
+                    entity_type="user", entity_id=user.id, request=request,
+                    details={"fields": list(update_data.keys())})
+
     return UserSchema(**enhance_user_with_supervisor(user, db))
 
 @router.post("/me/profile-image")
 async def upload_profile_image(
     file: UploadFile = File(...),
     current_user: UserSession = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Upload profile image for current user
@@ -444,6 +461,9 @@ async def upload_profile_image(
 
     # Generate URL path for the uploaded image
     url_path = f"/api/uploads/profiles/{unique_filename}"
+
+    record_activity(db, action=ActivityAction.PROFILE_IMAGE_UPDATE, user=current_user,
+                    entity_type="user", entity_id=user.id, request=request)
 
     return {
         "message": "Profile image uploaded successfully",
@@ -596,7 +616,8 @@ async def update_user(
     user_data: UserUpdate,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Update user profile
@@ -665,6 +686,10 @@ async def update_user(
     db.commit()
     db.refresh(user)
 
+    record_activity(db, action=ActivityAction.USER_UPDATE, user=current_user,
+                    entity_type="user", entity_id=user.id, request=request,
+                    details={"fields": list(update_data.keys())})
+
     return UserSchema(**enhance_user_with_supervisor(user, db))
 
 @router.put("/{user_id}/status", response_model=UserSchema)
@@ -673,7 +698,8 @@ async def update_user_status(
     status_data: UserStatusUpdate,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Change user status (active/suspended/etc)
@@ -722,6 +748,10 @@ async def update_user_status(
     db.refresh(user)
 
     # TODO: Send notifications about status change
+
+    record_activity(db, action=ActivityAction.USER_STATUS_CHANGE, user=current_user,
+                    entity_type="user", entity_id=user.id, request=request,
+                    details={"old_status": old_status.value, "new_status": status_data.status.value})
 
     return UserSchema(**enhance_user_with_supervisor(user, db))
 
@@ -804,7 +834,8 @@ async def assign_supervisor(
     supervisor_data: dict,  # {"supervisor_id": "uuid"}
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Assign or change supervisor for a user
@@ -876,6 +907,10 @@ async def assign_supervisor(
 
     db.commit()
     db.refresh(user)
+
+    record_activity(db, action=ActivityAction.SUPERVISOR_ASSIGN, user=current_user,
+                    entity_type="user", entity_id=user.id, request=request,
+                    details={"supervisor_id": str(user.supervisor_id) if user.supervisor_id else None})
 
     return UserSchema(**enhance_user_with_supervisor(user, db))
 

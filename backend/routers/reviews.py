@@ -3,14 +3,15 @@ Performance Review API Router
 Handles review cycles, reviews, and evaluation workflows
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_, or_, desc, asc
 from typing import List, Optional, Dict, Any
 from database import get_db
-from models import User, ReviewCycle, Review, Initiative, InitiativeAssignment, Goal, Organization, ReviewTrait, ReviewQuestion, ReviewCycleTrait, ReviewAssignment, ReviewResponse as ReviewResponseModel, ReviewScore, PerformanceScore, ReviewCycleStatus
+from models import User, ReviewCycle, Review, Initiative, InitiativeAssignment, Goal, Organization, ReviewTrait, ReviewQuestion, ReviewCycleTrait, ReviewAssignment, ReviewResponse as ReviewResponseModel, ReviewScore, PerformanceScore, ReviewCycleStatus, ActivityAction
 from routers.auth import get_current_user
 from utils.permissions import UserPermissions
+from utils.activity import record_activity
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import json
@@ -156,7 +157,8 @@ async def get_review_cycles(
 async def create_review_cycle(
     cycle_data: ReviewCycleCreate,
     current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """Create a new review cycle in DRAFT status"""
     if "review_create_cycle" not in current_user.permissions:
@@ -208,6 +210,10 @@ async def create_review_cycle(
 
     db.commit()
     db.refresh(cycle)
+
+    record_activity(db, action=ActivityAction.REVIEW_CYCLE_CREATE, user=current_user,
+                    entity_type="review_cycle", entity_id=cycle.id, request=request,
+                    details={"name": cycle.name, "period": cycle.period})
 
     # Convert UUIDs to strings for response
     cycle.id = str(cycle.id)
@@ -513,7 +519,8 @@ async def update_review(
 async def submit_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """Submit a review for approval"""
     review = db.query(Review).filter(Review.id == review_id).first()
@@ -539,9 +546,13 @@ async def submit_review(
     
     review.status = 'submitted'
     review.submitted_at = datetime.utcnow()
-    
+
     db.commit()
-    
+
+    record_activity(db, action=ActivityAction.REVIEW_SUBMIT, user=current_user,
+                    entity_type="review", entity_id=review.id, request=request,
+                    details={"cycle_id": str(review.cycle_id)})
+
     return {"message": "Review submitted successfully"}
 
 def _initialize_cycle_participants(cycle: ReviewCycle, db: Session) -> List[User]:

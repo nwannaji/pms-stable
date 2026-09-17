@@ -3,7 +3,7 @@ Initiative Management API Router
 Based on CLAUDE.md specification with comprehensive initiative workflows
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
@@ -12,9 +12,10 @@ import uuid
 import os
 from datetime import datetime
 import json
- 
+
 from database import get_db
-from models import Initiative, InitiativeStatus, InitiativeType, User, InitiativeSubTask, InitiativeAssignment
+from models import Initiative, InitiativeStatus, InitiativeType, User, InitiativeSubTask, InitiativeAssignment, ActivityAction
+from utils.activity import record_activity
 from schemas.initiatives import (
     InitiativeCreate, InitiativeUpdate, InitiativeStatusUpdate, InitiativeSubmission, InitiativeReview,
     InitiativeExtensionRequest, InitiativeExtensionReview, Initiative as InitiativeSchema,
@@ -203,6 +204,7 @@ async def upload_initiative_document(
     file: UploadFile = File(...),
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Upload a document that can be attached to initiatives
@@ -259,6 +261,10 @@ async def upload_initiative_document(
     db.commit()
     db.refresh(document)
 
+    record_activity(db, action=ActivityAction.INITIATIVE_DOCUMENT_UPLOAD, user=current_user,
+                    entity_type="initiative_document", entity_id=document.id, request=request,
+                    details={"file_name": document.file_name})
+
     return InitiativeDocument.from_orm(document)
 
 @router.post("", response_model=InitiativeSchema)
@@ -267,7 +273,8 @@ async def create_initiative(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service),
-    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service)
+    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service),
+    request: Request = None
 ):
     """
     Create new initiative with scope validation and assignment
@@ -296,6 +303,11 @@ async def create_initiative(
             subtasks=subtasks_data
         )
 
+        record_activity(db, action=ActivityAction.INITIATIVE_CREATE, user=current_user,
+                        entity_type="initiative", entity_id=initiative.id, request=request,
+                        details={"title": initiative.title,
+                                 "urgency": initiative.urgency.value if initiative.urgency else None})
+
         return InitiativeSchema.from_orm(initiative)
 
     except ValueError as e:
@@ -307,7 +319,8 @@ async def approve_initiative(
     approval: InitiativeApproval,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service)
+    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service),
+    request: Request = None
 ):
     """
     Approve or reject a pending initiative
@@ -330,6 +343,13 @@ async def approve_initiative(
             raise HTTPException(status_code=400, detail="Failed to approve/reject initiative")
 
         initiative = db.query(Initiative).filter(Initiative.id == initiative_id).first()
+
+        record_activity(db, action=ActivityAction.INITIATIVE_APPROVE, user=current_user,
+                        entity_type="initiative", entity_id=initiative_id, request=request,
+                        details={"approved": approval.approved,
+                                 "rejection_reason": approval.rejection_reason,
+                                 "status": initiative.status.value if initiative.status else None})
+
         return InitiativeSchema.from_orm(initiative)
 
     except ValueError as e:
@@ -416,7 +436,8 @@ async def start_initiative(
 async def complete_initiative(
     initiative_id: uuid.UUID,
     current_user: UserSession = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Mark ONGOING initiative as complete
@@ -448,6 +469,10 @@ async def complete_initiative(
     initiative.status = InitiativeStatus.UNDER_REVIEW
     db.commit()
     db.refresh(initiative)
+
+    record_activity(db, action=ActivityAction.INITIATIVE_COMPLETE, user=current_user,
+                    entity_type="initiative", entity_id=initiative_id, request=request,
+                    details={"title": initiative.title})
 
     return InitiativeSchema.from_orm(initiative)
 
@@ -789,7 +814,8 @@ async def update_initiative(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service),
-    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service)
+    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service),
+    request: Request = None
 ):
     """
     Update initiative details
@@ -817,6 +843,10 @@ async def update_initiative(
 
     db.commit()
     db.refresh(initiative)
+
+    record_activity(db, action=ActivityAction.INITIATIVE_UPDATE, user=current_user,
+                    entity_type="initiative", entity_id=initiative_id, request=request,
+                    details={"fields": list(update_data.keys())})
 
     return InitiativeSchema.from_orm(initiative)
 
@@ -864,7 +894,8 @@ async def submit_initiative(
     submission_data: InitiativeSubmission,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service)
+    initiative_service: InitiativeWorkflowService = Depends(get_initiative_service),
+    request: Request = None
 ):
     """
     Submit initiative report and documents
@@ -885,6 +916,10 @@ async def submit_initiative(
         # Get submission details
         from models import InitiativeSubmission as SubmissionModel
         submission = db.query(SubmissionModel).filter(SubmissionModel.initiative_id == initiative_id).first()
+
+        record_activity(db, action=ActivityAction.INITIATIVE_SUBMIT, user=current_user,
+                        entity_type="initiative", entity_id=initiative_id, request=request,
+                        details={"submission_id": str(submission.id) if submission else None})
 
         return InitiativeSubmissionDetail.from_orm(submission)
 

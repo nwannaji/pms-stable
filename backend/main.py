@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 from database import create_tables
-from routers import auth, users, roles, organization, initiatives, goals, goal_tags, reviews, performance, notifications
+from routers import auth, users, roles, organization, initiatives, goals, goal_tags, reviews, performance, notifications, analytics, reports
 
 # Read CORS origins from environment variable, with fallback to .env file
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="http://localhost:3000").split(",")
@@ -42,6 +42,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Forwarded-Proto", "X-Forwarded-Host"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Trust X-Forwarded-* headers from IIS reverse proxy
@@ -69,6 +70,8 @@ app.include_router(goal_tags.router, tags=["Goal Tags"])
 app.include_router(reviews.router, prefix="/api/reviews", tags=["Reviews"])
 app.include_router(performance.router, prefix="/api/performance", tags=["Performance"])
 app.include_router(notifications.router, tags=["Notifications"])
+app.include_router(analytics.router, prefix="/api", tags=["Analytics"])
+app.include_router(reports.router, prefix="/api", tags=["Reports"])
 
 @app.on_event("startup")
 async def startup_event():

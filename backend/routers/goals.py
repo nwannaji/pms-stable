@@ -3,7 +3,7 @@ Goal Management API Router
 Based on CLAUDE.md specification with hierarchical goal cascade
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 
 from database import get_db
-from models import Goal, GoalScope, GoalType, GoalStatus, User, Quarter, GoalFreezeLog, Organization, OrganizationLevel
+from models import Goal, GoalScope, GoalType, GoalStatus, User, Quarter, GoalFreezeLog, Organization, OrganizationLevel, ActivityAction
 from schemas.goals import (
     GoalCreate, GoalUpdate, GoalProgressUpdate, GoalStatusUpdate,
     Goal as GoalSchema, GoalWithChildren, GoalProgressReport, GoalList, GoalStats,
@@ -22,6 +22,7 @@ from schemas.goals import (
 from schemas.auth import UserSession
 from utils.auth import get_current_user
 from utils.permissions import UserPermissions, SystemPermissions
+from utils.activity import record_activity
 from utils.goal_cascade import GoalCascadeService
 from utils.notifications import NotificationService
 
@@ -622,7 +623,8 @@ async def create_goal_for_supervisee(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service),
-    notification_service: NotificationService = Depends(get_notification_service)
+    notification_service: NotificationService = Depends(get_notification_service),
+    request: Request = None
 ):
     """
     Supervisor creates a goal for their supervisee
@@ -695,6 +697,11 @@ async def create_goal_for_supervisee(
         notification_service.notify_goal_assigned(goal, user, supervisee)
     except Exception as e:
         print(f"Error sending goal assignment notification: {e}")
+
+    record_activity(db, action=ActivityAction.GOAL_CREATE, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"title": goal.title, "scope": goal.scope.value if goal.scope else None,
+                             "created_for": str(supervisee_id)})
 
     return GoalSchema.from_orm(goal)
 
@@ -834,7 +841,8 @@ async def create_goal(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service),
-    goal_service: GoalCascadeService = Depends(get_goal_service)
+    goal_service: GoalCascadeService = Depends(get_goal_service),
+    request: Request = None
 ):
     """
     Create new goal with permission gating by scope
@@ -939,6 +947,10 @@ async def create_goal(
         except Exception as e:
             print(f"Error sending goal creation notification: {e}")
 
+    record_activity(db, action=ActivityAction.GOAL_CREATE, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"title": goal.title, "scope": goal.scope.value if goal.scope else None})
+
     return GoalSchema.from_orm(goal)
 
 @router.get("/{goal_id}", response_model=GoalSchema)
@@ -976,7 +988,8 @@ async def update_goal(
     goal_data: GoalUpdate,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Edit goal details
@@ -1050,6 +1063,10 @@ async def update_goal(
     db.commit()
     db.refresh(goal)
 
+    record_activity(db, action=ActivityAction.GOAL_UPDATE, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"fields": list(update_data.keys())})
+
     return GoalSchema.from_orm(goal)
 
 @router.put("/{goal_id}/progress", response_model=GoalSchema)
@@ -1059,7 +1076,8 @@ async def update_goal_progress(
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
     permission_service: UserPermissions = Depends(get_permission_service),
-    goal_service: GoalCascadeService = Depends(get_goal_service)
+    goal_service: GoalCascadeService = Depends(get_goal_service),
+    request: Request = None
 ):
     """
     Update progress percentage with required report
@@ -1141,6 +1159,10 @@ async def update_goal_progress(
             notification_service.notify_goal_progress_updated(goal, user)
         except Exception as e:
             print(f"Error sending progress notification: {e}")
+
+        record_activity(db, action=ActivityAction.GOAL_PROGRESS_UPDATE, user=current_user,
+                        entity_type="goal", entity_id=goal.id, request=request,
+                        details={"new_percentage": progress_data.new_percentage})
 
         return GoalSchema(**goal_dict)
 
@@ -1280,7 +1302,8 @@ async def approve_goal(
     approval: GoalApproval,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Approve or reject an individual goal
@@ -1350,6 +1373,11 @@ async def approve_goal(
     except Exception as e:
         print(f"Error sending approval notification: {e}")
 
+    record_activity(db, action=ActivityAction.GOAL_APPROVE, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"approved": approval.approved,
+                             "rejection_reason": approval.rejection_reason})
+
     return GoalSchema.from_orm(goal)
 
 @router.delete("/{goal_id}")
@@ -1357,7 +1385,8 @@ async def delete_goal(
     goal_id: uuid.UUID,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Delete a goal
@@ -1400,8 +1429,13 @@ async def delete_goal(
         )
 
     # Delete goal
+    goal_title = goal.title
     db.delete(goal)
     db.commit()
+
+    record_activity(db, action=ActivityAction.GOAL_DELETE, user=current_user,
+                    entity_type="goal", entity_id=goal_id, request=request,
+                    details={"title": goal_title})
 
     return {"message": "Goal deleted successfully"}
 
@@ -1412,7 +1446,8 @@ async def assess_goal(
     assessment: GoalAssessmentRequest,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Supervisor submits KPI actuals for a goal.
@@ -1484,6 +1519,10 @@ async def assess_goal(
     db.commit()
     db.refresh(goal)
 
+    record_activity(db, action=ActivityAction.GOAL_ASSESS, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"achieved": goal.achieved})
+
     goal_dict = goal.__dict__.copy()
     goal_dict = enrich_goal_dict(goal_dict, goal, db)
     return GoalSchema(**goal_dict)
@@ -1495,7 +1534,8 @@ async def supervisor_score_goal(
     score_data: SupervisorScoreRequest,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Supervisor manually scores a completed goal.
@@ -1548,6 +1588,10 @@ async def supervisor_score_goal(
     except Exception as e:
         print(f"Error sending score notification: {e}")
 
+    record_activity(db, action=ActivityAction.GOAL_ASSESS, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"supervisor_score": score_data.supervisor_score})
+
     goal_dict = goal.__dict__.copy()
     goal_dict = enrich_goal_dict(goal_dict, goal, db)
     return GoalSchema(**goal_dict)
@@ -1559,7 +1603,8 @@ async def freeze_goal(
     reason: str = None,
     current_user: UserSession = Depends(get_current_user),
     db: Session = Depends(get_db),
-    permission_service: UserPermissions = Depends(get_permission_service)
+    permission_service: UserPermissions = Depends(get_permission_service),
+    request: Request = None
 ):
     """
     Freeze an individual goal to prevent editing
@@ -1586,6 +1631,10 @@ async def freeze_goal(
 
     db.commit()
     db.refresh(goal)
+
+    record_activity(db, action=ActivityAction.GOAL_FREEZE, user=current_user,
+                    entity_type="goal", entity_id=goal.id, request=request,
+                    details={"frozen": True, "reason": reason})
 
     return {
         "message": "Goal frozen successfully",

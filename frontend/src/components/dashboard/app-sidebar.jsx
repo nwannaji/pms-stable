@@ -116,10 +116,12 @@ const managementItems = [
 
 const reportsItems = [
   {
+    // Personal analytics (My Activity) is available to everyone; the page
+    // self-gates the org-wide Overview tab by permission.
     title: "Analytics",
     url: "/dashboard/analytics",
     icon: BarChart3,
-    permission: "reports_generate",
+    permission: null,
   },
   {
     title: "Reports",
@@ -254,10 +256,8 @@ export function AppSidebar() {
           <NavGroup title="Management" items={managementItems} />
         </PermissionGuard>
 
-        <PermissionGuard permission="reports_generate">
-          <Separator className="my-1 bg-sidebar-border" />
-          <NavGroup title="Reports" items={reportsItems} />
-        </PermissionGuard>
+        <Separator className="my-1 bg-sidebar-border" />
+        <NavGroup title="Reports" items={reportsItems} />
 
         <Separator className="my-1 bg-sidebar-border" />
         <NavGroup title="Settings" items={settingsItems} />

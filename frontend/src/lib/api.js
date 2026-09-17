@@ -401,6 +401,16 @@ export const auth = {
   },
 
   /**
+   * Session heartbeat — keeps the user's login-session last_active_at fresh
+   * so time-on-platform analytics work without an explicit logout.
+   * Errors are expected to be swallowed by the caller.
+   * @returns {Promise<Object>} Heartbeat response ({ ok: true })
+   */
+  async heartbeat() {
+    return POST('/api/auth/heartbeat')
+  },
+
+  /**
    * User onboarding with token
    * @param {Object} data - Onboarding data
    * @returns {Promise<Object>} Onboarding response
@@ -1646,3 +1656,131 @@ export { GET, POST, PUT, DELETE }
 
 // Export API error class
 export { ApiError }
+
+/**
+ * Download a file from an authenticated endpoint via blob fetch.
+ * <a href> downloads can't send the Authorization header, and query-param
+ * tokens leak into proxy logs, so we fetch the blob directly and trigger
+ * a client-side download. Retries once after a token refresh on 401.
+ * @param {string} endpoint - API endpoint path (query params included or in params)
+ * @param {Object} params - Query parameters
+ * @param {string} fallbackName - Filename if the server doesn't send one
+ */
+export async function downloadFile(endpoint, params = {}, fallbackName = 'download.xlsx') {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
+      searchParams.append(key, value.toString())
+    }
+  })
+  const queryString = searchParams.toString()
+  const url = `${API_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ''}`
+
+  const doFetch = () => fetch(url, { headers: createHeaders(true) })
+
+  let response = await doFetch()
+  if (response.status === 401) {
+    const refreshed = await tryRefreshToken()
+    if (refreshed) {
+      response = await doFetch()
+    }
+  }
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}: ${response.statusText}`
+    try {
+      const data = await response.json()
+      if (data?.detail) detail = data.detail
+    } catch { /* not json */ }
+    throw new ApiError(detail, response.status, null)
+  }
+
+  // Server-suggested filename from Content-Disposition (RFC 5987 aware)
+  const disposition = response.headers.get('content-disposition') || ''
+  let filename = fallbackName
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/)
+  if (utf8Match) {
+    filename = decodeURIComponent(utf8Match[1])
+  } else {
+    const asciiMatch = disposition.match(/filename="?([^";]+)"?/)
+    if (asciiMatch) filename = asciiMatch[1]
+  }
+
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objectUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(objectUrl)
+  return filename
+}
+
+/**
+ * Analytics API - org-wide and personal analytics
+ */
+export const analytics = {
+  /**
+   * System-wide usage overview (permission-gated)
+   * @param {number} days - Time window (1-365)
+   */
+  async overview(days = 30) {
+    return GET('/api/analytics/overview', { days })
+  },
+
+  /**
+   * Business analytics: goals, initiatives, reviews, performance
+   * @param {Object} params - { days, organization_id }
+   */
+  async business(params = {}) {
+    return GET('/api/analytics/business', params)
+  },
+
+  /**
+   * Personal analytics for the current user
+   * @param {number} days - Time window (1-90)
+   */
+  async me(days = 30) {
+    return GET('/api/analytics/me', { days })
+  },
+
+  /**
+   * Activity timeseries for a specific user (self or admin)
+   * @param {string} userId - User ID
+   * @param {number} days - Time window (1-365)
+   */
+  async userActivity(userId, days = 30) {
+    return GET(`/api/analytics/users/${userId}/activity`, { days })
+  }
+}
+
+/**
+ * Reports API: types, preview, and file export (via downloadFile)
+ */
+export const reports = {
+  /**
+   * List available report types
+   */
+  async types() {
+    return GET('/api/reports/types')
+  },
+
+  /**
+   * Preview the first rows of a report
+   * @param {Object} params - { type, date_from, date_to, organization_id, limit }
+   */
+  async preview(params = {}) {
+    return GET('/api/reports/preview', params)
+  },
+
+  /**
+   * Export a report (Excel or JSON) and trigger a browser download
+   * @param {Object} params - { type, format, date_from, date_to, organization_id }
+   */
+  async export(params = {}) {
+    const fallbackName = `pms-${params.type || 'report'}-report.${params.format === 'json' ? 'json' : 'xlsx'}`
+    return downloadFile('/api/reports/export', params, fallbackName)
+  }
+}

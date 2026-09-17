@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, Enum, Date, Float, Numeric, UniqueConstraint, CheckConstraint, Table
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, JSON, Enum, Date, Float, Numeric, UniqueConstraint, CheckConstraint, Table, Index, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -184,6 +184,7 @@ class User(Base):
     onboarding_token = Column(String(255))
     onboarding_token_expires_at = Column(DateTime(timezone=True))  # Token expiration time
     profile_image_path = Column(String(500), nullable=True)  # Local file path for profile images
+    last_login = Column(DateTime(timezone=True), nullable=True)  # Updated on successful login
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -246,6 +247,39 @@ class RefreshToken(Base):
 
     # Relationships
     user = relationship("User", backref="refresh_tokens")
+
+
+class LoginSession(Base):
+    """
+    One row per platform login; session duration is computed at read time as
+    COALESCE(logout_at, last_active_at) - login_at (never stored).
+    The frontend heartbeat endpoint keeps last_active_at fresh (~2 min pings);
+    a gap larger than STALE_AFTER_SECONDS closes the row (ended_reason='stale')
+    and the next ping opens a new one.
+    """
+    __tablename__ = "login_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
+
+    # Denormalized so deleted users still appear in weekly aggregates (mirrors ActivityLog.user_email)
+    user_email = Column(String(255), nullable=True)
+    user_name = Column(String(255), nullable=True)
+
+    login_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_active_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    logout_at = Column(DateTime(timezone=True), nullable=True)
+    ended_reason = Column(String(20), nullable=True)  # 'logout' | 'stale'
+
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+
+    __table_args__ = (
+        Index("ix_login_sessions_login_at", "login_at"),
+        Index("ix_login_sessions_user_time", "user_id", "login_at"),
+        Index("ix_login_sessions_open", "user_id", postgresql_where=text("logout_at IS NULL")),
+    )
 
 
 class Goal(Base):
@@ -1028,6 +1062,82 @@ goal_tag_assignments = Table(
     Column('tag_id', UUID(as_uuid=True), ForeignKey('goal_tags.id', ondelete='CASCADE'), primary_key=True),
     Column('assigned_at', DateTime(timezone=True), server_default=func.now())
 )
+
+# Activity tracking enums
+class ActivityAction(str, enum.Enum):
+    """Types of user activity events recorded for analytics"""
+    # Authentication
+    LOGIN = "LOGIN"
+    LOGIN_FAILED = "LOGIN_FAILED"
+    LOGOUT = "LOGOUT"
+    TOKEN_REFRESH = "TOKEN_REFRESH"
+    PASSWORD_CHANGE = "PASSWORD_CHANGE"
+    PASSWORD_RESET = "PASSWORD_RESET"
+
+    # Profile
+    PROFILE_UPDATE = "PROFILE_UPDATE"
+    PROFILE_IMAGE_UPDATE = "PROFILE_IMAGE_UPDATE"
+
+    # Goals
+    GOAL_CREATE = "GOAL_CREATE"
+    GOAL_UPDATE = "GOAL_UPDATE"
+    GOAL_PROGRESS_UPDATE = "GOAL_PROGRESS_UPDATE"
+    GOAL_APPROVE = "GOAL_APPROVE"
+    GOAL_DELETE = "GOAL_DELETE"
+    GOAL_ASSESS = "GOAL_ASSESS"
+    GOAL_FREEZE = "GOAL_FREEZE"
+
+    # Initiatives
+    INITIATIVE_CREATE = "INITIATIVE_CREATE"
+    INITIATIVE_UPDATE = "INITIATIVE_UPDATE"
+    INITIATIVE_SUBMIT = "INITIATIVE_SUBMIT"
+    INITIATIVE_APPROVE = "INITIATIVE_APPROVE"
+    INITIATIVE_COMPLETE = "INITIATIVE_COMPLETE"
+    INITIATIVE_DOCUMENT_UPLOAD = "INITIATIVE_DOCUMENT_UPLOAD"
+
+    # Reviews
+    REVIEW_SUBMIT = "REVIEW_SUBMIT"
+    REVIEW_CYCLE_CREATE = "REVIEW_CYCLE_CREATE"
+
+    # Users (admin)
+    USER_CREATE = "USER_CREATE"
+    USER_UPDATE = "USER_UPDATE"
+    USER_STATUS_CHANGE = "USER_STATUS_CHANGE"
+    USER_DELETE = "USER_DELETE"
+    SUPERVISOR_ASSIGN = "SUPERVISOR_ASSIGN"
+    ROLE_CHANGE = "ROLE_CHANGE"
+
+    # Reports
+    REPORT_EXPORT = "REPORT_EXPORT"
+    DOWNLOAD = "DOWNLOAD"
+
+class ActivityLog(Base):
+    """
+    User activity audit trail for analytics and reporting
+    Captures authentication events and business-object changes
+    (no GET/page-view logging — write-side events only)
+    """
+    __tablename__ = "activity_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_email = Column(String(255), nullable=True)  # Attempted email for LOGIN_FAILED
+    action = Column(Enum(ActivityAction), nullable=False, index=True)
+    entity_type = Column(String(50), nullable=True)  # goal | initiative | user | review | report
+    entity_id = Column(UUID(as_uuid=True), nullable=True)
+    details = Column(JSON, nullable=True)  # NOTE: cannot be named "metadata" (reserved by SQLAlchemy)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        Index("ix_activity_user_time", "user_id", "created_at"),
+        Index("ix_activity_action_time", "action", "created_at"),
+    )
+
 
 class GoalTag(Base):
     """

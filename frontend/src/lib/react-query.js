@@ -93,7 +93,7 @@ export { queryClient }
 
 // Custom hooks for API calls
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { auth, users, organizations, roles, goals, goalTags, initiatives, tasks, notifications } from './api'
+import { auth, users, organizations, roles, goals, goalTags, initiatives, tasks, notifications, analytics, reports } from './api'
 
 // Query keys
 export const QUERY_KEYS = {
@@ -130,10 +130,73 @@ export const QUERY_KEYS = {
   NOTIFICATIONS: ['notifications'],
   NOTIFICATION_STATS: ['notifications', 'stats'],
 
+  // Analytics & Reports
+  ANALYTICS_OVERVIEW: (days) => ['analytics', 'overview', days],
+  ANALYTICS_BUSINESS: (params) => ['analytics', 'business', params],
+  ANALYTICS_ME: (days) => ['analytics', 'me', days],
+  ANALYTICS_USER_ACTIVITY: (id, days) => ['analytics', 'users', id, days],
+  REPORT_TYPES: ['reports', 'types'],
+  REPORT_PREVIEW: (params) => ['reports', 'preview', params],
+
   // Backward compatibility aliases
   TASKS: ['initiatives'],
   TASK: (id) => ['initiatives', id],
   TASK_SUBMISSIONS: (id) => ['initiatives', id, 'submissions'],
+}
+
+// Analytics & Reports hooks
+export function useOrgAnalytics(days = 30, options = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.ANALYTICS_OVERVIEW(days),
+    queryFn: () => analytics.overview(days),
+    staleTime: 60_000,
+    ...options,
+  })
+}
+
+export function useBusinessAnalytics(params = {}, options = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.ANALYTICS_BUSINESS(params),
+    queryFn: () => analytics.business(params),
+    staleTime: 60_000,
+    ...options,
+  })
+}
+
+export function useMyAnalytics(days = 30, options = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.ANALYTICS_ME(days),
+    queryFn: () => analytics.me(days),
+    staleTime: 60_000,
+    ...options,
+  })
+}
+
+export function useUserActivity(userId, days = 30, options = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.ANALYTICS_USER_ACTIVITY(userId, days),
+    queryFn: () => analytics.userActivity(userId, days),
+    enabled: !!userId,
+    staleTime: 60_000,
+    ...options,
+  })
+}
+
+export function useReportTypes(options = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.REPORT_TYPES,
+    queryFn: reports.types,
+    ...options,
+  })
+}
+
+export function useReportPreview(params, options = {}) {
+  return useQuery({
+    queryKey: QUERY_KEYS.REPORT_PREVIEW(params),
+    queryFn: () => reports.preview(params),
+    staleTime: 60_000,
+    enabled: !!params?.type && (options.enabled ?? true),
+  })
 }
 
 // Auth hooks
