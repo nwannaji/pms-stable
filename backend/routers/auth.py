@@ -13,7 +13,9 @@ import logging
 import os
 
 from database import get_db
-from models import User, UserStatus
+from models import User, UserStatus, ActivityAction
+from utils.activity import record_activity
+from utils.sessions import start_login_session, close_session_on_logout, heartbeat
 from schemas.auth import (
     LoginRequest, LoginResponse, OnboardingRequest,
     PasswordResetRequest, PasswordChangeRequest, UserSession
@@ -54,6 +56,8 @@ async def login(
     """
     user = authenticate_user(db, login_data.email, login_data.password)
     if not user:
+        record_activity(db, action=ActivityAction.LOGIN_FAILED,
+                        user_email=login_data.email, request=request)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
@@ -84,6 +88,11 @@ async def login(
         user_agent=user_agent,
         ip_address=client_ip
     )
+
+    # Track last login + activity
+    user.last_login = datetime.now(timezone.utc)
+    record_activity(db, action=ActivityAction.LOGIN, user=user, request=request)
+    start_login_session(db, user=user, request=request)
 
     # Get user permissions
     permission_service = UserPermissions(db)
@@ -126,7 +135,8 @@ class LogoutRequest(BaseModel):
 async def logout(
     logout_data: Optional[LogoutRequest] = None,
     current_user: UserSession = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     User logout - revokes refresh token(s)
@@ -135,13 +145,37 @@ async def logout(
     if logout_data and logout_data.logout_all_devices:
         # Revoke all refresh tokens for this user
         revoke_all_user_refresh_tokens(db, current_user.user_id)
+        close_session_on_logout(db, user_id=current_user.user_id, all_devices=True)
+        record_activity(db, action=ActivityAction.LOGOUT, user=current_user, request=request,
+                        details={"all_devices": True})
         return {"message": "Successfully logged out from all devices"}
     elif logout_data and logout_data.refresh_token:
         # Revoke the specific refresh token
         revoke_refresh_token(db, logout_data.refresh_token)
+        close_session_on_logout(db, user_id=current_user.user_id)
+        record_activity(db, action=ActivityAction.LOGOUT, user=current_user, request=request)
         return {"message": "Successfully logged out"}
     else:
+        close_session_on_logout(db, user_id=current_user.user_id)
+        record_activity(db, action=ActivityAction.LOGOUT, user=current_user, request=request)
         return {"message": "Successfully logged out"}
+
+
+@router.post("/heartbeat")
+@limiter.limit("60/minute")
+async def heartbeat_ping(
+    request: Request,
+    current_user: UserSession = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Lightweight liveness ping from the dashboard. Keeps the user's open
+    login session's last_active_at fresh so time-on-platform can be
+    measured even without an explicit logout. Silent client-side — errors
+    are never surfaced to the user.
+    """
+    heartbeat(db, user=current_user, request=request)
+    return {"ok": True}
 
 @router.post("/onboard")
 @limiter.limit("10/minute")
@@ -184,6 +218,10 @@ async def onboard_user(
         user.status = UserStatus.ACTIVE
 
     db.commit()
+
+    if is_password_reset:
+        record_activity(db, action=ActivityAction.PASSWORD_RESET, user_id=user.id,
+                        user_email=user.email, request=request)
 
     message = "Password reset successful" if is_password_reset else "User successfully onboarded"
     return {"message": message}
@@ -233,7 +271,8 @@ def _send_password_reset_email_bg(user_email: str, user_name: str, reset_token: 
 async def change_password(
     password_data: PasswordChangeRequest,
     current_user: UserSession = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Change password for authenticated user
@@ -252,6 +291,8 @@ async def change_password(
     # Update password
     user.password_hash = get_password_hash(password_data.new_password)
     db.commit()
+
+    record_activity(db, action=ActivityAction.PASSWORD_CHANGE, user=current_user, request=request)
 
     return {"message": "Password changed successfully"}
 
@@ -326,6 +367,9 @@ async def refresh_access_token(
     # Get user permissions
     permission_service = UserPermissions(db)
     user_perms = permission_service.get_user_effective_permissions(user)
+
+    record_activity(db, action=ActivityAction.TOKEN_REFRESH, user_id=user.id,
+                    user_email=user.email, request=request)
 
     return {
         "access_token": access_token,
